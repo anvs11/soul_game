@@ -20,3 +20,22 @@ __pycache__/
 .venv/
 venv/
 env/
+
+
+# Unity project (Game/)
+/Game/Library/
+/Game/Temp/
+/Game/Obj/
+/Game/Logs/
+/Game/Builds/
+/Game/TestResults/
+/Game/LocalState/
+/Game/UserSettings/
+/Game/.vs/
+/Game/.idea/
+/Game/*.csproj
+/Game/*.sln
+/Game/*.slnx
+/Game/*.user
+/Game/*.pidb
+/Game/*.booproj
