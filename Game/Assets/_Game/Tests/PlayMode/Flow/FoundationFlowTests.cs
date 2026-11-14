@@ -60,18 +60,30 @@ namespace Game.Tests.Flow
             {
                 var home = Object.FindFirstObjectByType<HomeScreen>();
                 Assert.That(home, Is.Not.Null);
+                if (home.IsShowingResult) home.PrimaryButton.onClick.Invoke();
                 home.PrimaryButton.onClick.Invoke();
                 bootstrap.Coordinator.StartRun(RunRequest.Sandbox(999)); // Duplicate during load.
                 yield return Until(() => bootstrap.Coordinator.Phase == RunPhase.InArena, "Arena not loaded.");
                 Assert.That(home == null, Is.True, "Old Home screen survived scene unload.");
                 Assert.That(ids.Add(bootstrap.Coordinator.RunId), Is.True);
                 AssertOneSceneContext();
-                var arena = Object.FindFirstObjectByType<EmptyArenaScreen>();
+                var arena = Object.FindFirstObjectByType<ArenaController>();
                 Assert.That(arena, Is.Not.Null);
-                arena.PrimaryButton.onClick.Invoke();
+                arena.TryExit();
+                Assert.That(bootstrap.Coordinator.LastOutcome, Is.Null);
+                foreach (var enemy in Object.FindObjectsByType<Game.AI.SandboxEnemy>(FindObjectsSortMode.None))
+                {
+                    var hit = new Game.Combat.DamagePacket(-1, 100);
+                    enemy.GetComponent<Game.Actors.DamageReceiver>().ApplyDamage(in hit);
+                }
+                Assert.That(arena.RemainingEnemies, Is.Zero);
+                arena.TryExit();
+                Assert.That(bootstrap.Coordinator.LastOutcome, Is.Null, "Exit from far away must fail.");
+                arena.Player.transform.position = arena.ExitPosition;
+                arena.TryExit(); arena.TryExit();
                 yield return Until(() => bootstrap.Coordinator.Phase == RunPhase.Home, "Home not loaded.");
                 Assert.That(arena == null, Is.True, "Old arena screen survived scene unload.");
-                Assert.That(bootstrap.Coordinator.LastOutcome, Is.EqualTo(RunOutcome.Abandoned));
+                Assert.That(bootstrap.Coordinator.LastOutcome, Is.EqualTo(RunOutcome.Victory));
                 AssertOneSceneContext();
             }
         }
@@ -82,7 +94,8 @@ namespace Game.Tests.Flow
             bootstrap.Coordinator.StartRun(RunRequest.Sandbox());
             yield return Until(() => bootstrap.Coordinator.Phase == RunPhase.InArena, "Arena not loaded.");
             bootstrap.Coordinator.FinishRun(RunOutcome.Victory);
-            bootstrap.Coordinator.FinishRun(RunOutcome.Defeat);
+            var death = new Game.Combat.DamagePacket(-1, 999);
+            Object.FindFirstObjectByType<ArenaController>().Player.GetComponent<Game.Actors.DamageReceiver>().ApplyDamage(in death);
             yield return Until(() => bootstrap.Coordinator.Phase == RunPhase.Home, "Home not loaded.");
             Assert.That(bootstrap.Coordinator.LastOutcome, Is.EqualTo(RunOutcome.Defeat));
             AssertOneSceneContext();

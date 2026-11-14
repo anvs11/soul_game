@@ -10,8 +10,10 @@ namespace Game.UI
     {
         private RunCoordinator coordinator;
         private bool subscribed;
-        private Text status;
+        private Text status, titleLabel, descriptionLabel;
         public Button PrimaryButton { get; private set; }
+        protected virtual bool ShowView => true;
+        protected virtual void OnBound(RunCoordinator value) { }
         protected abstract string Title { get; }
         protected abstract string Description { get; }
         protected abstract string ButtonLabel { get; }
@@ -20,10 +22,11 @@ namespace Game.UI
         {
             Detach();
             coordinator = value ?? throw new ArgumentNullException(nameof(value));
-            if (PrimaryButton == null) CreateView();
+            OnBound(value);
+            if (ShowView && PrimaryButton == null) CreateView();
             Attach();
             Refresh();
-            if (EventSystem.current != null)
+            if (EventSystem.current != null && PrimaryButton != null)
                 EventSystem.current.SetSelectedGameObject(PrimaryButton.gameObject);
         }
 
@@ -33,8 +36,8 @@ namespace Game.UI
             Refresh();
         }
 
-        private void OnDisable() => Detach();
-        private void OnDestroy()
+        protected virtual void OnDisable() => Detach();
+        protected virtual void OnDestroy()
         {
             Detach();
             coordinator = null;
@@ -53,9 +56,10 @@ namespace Game.UI
             subscribed = false;
         }
 
-        private void Refresh()
+        protected void Refresh()
         {
             if (status == null || coordinator == null) return;
+            titleLabel.text = Title; descriptionLabel.text = Description;
             bool failed = coordinator.Phase == RunPhase.Faulted;
             PrimaryButton.interactable = failed || CanAct(coordinator);
             PrimaryButton.GetComponentInChildren<Text>().text = failed ? "Повторить переход домой" : ButtonLabel;
@@ -95,8 +99,8 @@ namespace Game.UI
             var panel = Rect("Content", background);
             panel.sizeDelta = new Vector2(880, 540);
             var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            Label("Title", panel, font, Title, 44, new Vector2(0, 160), new Vector2(840, 80));
-            Label("Description", panel, font, Description, 25, new Vector2(0, 55), new Vector2(840, 140));
+            titleLabel = Label("Title", panel, font, Title, 44, new Vector2(0, 160), new Vector2(840, 80));
+            descriptionLabel = Label("Description", panel, font, Description, 25, new Vector2(0, 55), new Vector2(840, 140));
             status = Label("Status", panel, font, "", 20, new Vector2(0, -70), new Vector2(840, 95));
 
             var buttonRect = Rect("PrimaryButton", panel);
