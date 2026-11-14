@@ -8,6 +8,35 @@ namespace Game.Tests
 {
     public sealed class ProjectileTests
     {
+        [UnityTest] public IEnumerator DestroyedReturnedProjectileDoesNotBreakPoolOwnerTeardown()
+        {
+            var template = new GameObject("Teardown template"); template.SetActive(false);
+            var projectile = template.AddComponent<Projectile>();
+            var host = new GameObject("Teardown pool"); var pool = host.AddComponent<ProjectilePool>();
+            pool.Configure(projectile, 1);
+            var request = new ProjectileSpawnRequest(new Vector2(7000,7000), Vector2.right, 1, 10, .08f, 0, 1, CombatFaction.Player, new DamagePacket(1,10));
+            try
+            {
+                Assert.IsTrue(pool.TrySpawn(in request));
+                Projectile spawned = null;
+                foreach (var candidate in Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None))
+                    if (candidate != projectile && Vector2.Distance(candidate.transform.position, request.Position) < .1f) spawned = candidate;
+                Assert.IsNotNull(spawned);
+                pool.enabled = false;
+                Assert.That(pool.ActiveCount, Is.Zero);
+                // Scene roots may be destroyed before the component owning ObjectPool.
+                Object.DestroyImmediate(spawned.gameObject);
+                Object.DestroyImmediate(host);
+                yield return null;
+                LogAssert.NoUnexpectedReceived();
+            }
+            finally
+            {
+                if (host != null) Object.DestroyImmediate(host);
+                Object.DestroyImmediate(template);
+            }
+        }
+
         [UnityTest] public IEnumerator FullPoolPreservesAmmoAndDisableReturnsAllProjectiles()
         {
             var template = new GameObject("Pool template"); template.SetActive(false);

@@ -38,7 +38,7 @@ namespace Game.Combat
             UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(root, gameObject.scene);
             container = root.transform; // Not parented to moving/scaled player.
             pool = new ObjectPool<Projectile>(() => Instantiate(prefab, container),
-                null, p => p.ResetState(), p => Destroy(p.gameObject), true, 16, maxActive);
+                null, p => p.ResetState(), p => { if (p != null) Destroy(p.gameObject); }, true, 16, maxActive);
         }
         private void Release(Projectile projectile)
         {

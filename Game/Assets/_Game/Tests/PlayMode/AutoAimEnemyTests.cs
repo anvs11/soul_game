@@ -75,7 +75,7 @@ namespace Game.Tests
             }
             finally { Object.DestroyImmediate(a.gameObject); Object.DestroyImmediate(b.gameObject); Object.DestroyImmediate(root); }
         }
-        [UnityTest] public IEnumerator ContactIsLimitedToOneAttemptPerSecondAndPursuitStopsOnDeath()
+        [UnityTest] public IEnumerator WindupDealsOneHitThenRecoversAndPursuitStopsOnDeath()
         {
             var root = new GameObject("Contact registry"); var registry = root.AddComponent<TargetRegistry>();
             var player = new GameObject("Contact player"); player.transform.position = new Vector3(3200, 3200, 0);
@@ -87,9 +87,9 @@ namespace Game.Tests
                 Physics2D.SyncTransforms();
                 yield return new WaitForFixedUpdate(); yield return new WaitForFixedUpdate();
                 Assert.That(enemy.GetComponent<Rigidbody2D>().linearVelocity.magnitude, Is.LessThanOrEqualTo(2.51f));
-                Assert.That(health.Armor, Is.EqualTo(20));
-                yield return new WaitForSeconds(.2f); Assert.That(health.Armor, Is.EqualTo(20));
-                yield return new WaitForSeconds(.9f); Assert.That(health.Armor, Is.EqualTo(10));
+                Assert.That(health.Armor, Is.EqualTo(30));
+                yield return new WaitForSeconds(.2f); Assert.That(health.Armor, Is.EqualTo(30));
+                yield return new WaitForSeconds(.35f); Assert.That(health.Armor, Is.EqualTo(20));
                 health.ApplyDamage(new DamagePacket(0, 1000));
                 yield return new WaitForSeconds(.55f);
                 if (!health.IsDead) health.ApplyDamage(new DamagePacket(0, 1000));

@@ -15,7 +15,14 @@ namespace Game.Tests
         public IEnumerator GamepadPressIsOnePulseAndRepeatedReadsShareSnapshot()
         {
             var previousMode = InputSystem.settings.updateMode;
+            var previousBackground = InputSystem.settings.backgroundBehavior;
+            // Default Update() can route to Editor when a batch Game view has no focus.
             InputSystem.settings.updateMode = InputSettings.UpdateMode.ProcessEventsManually;
+            InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+#if UNITY_EDITOR
+            var previousEditorBehavior = InputSystem.settings.editorInputBehaviorInPlayMode;
+            InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+#endif
             var pad = InputSystem.AddDevice<Gamepad>();
             var asset = ScriptableObject.CreateInstance<InputActionAsset>();
             var map = new InputActionMap("Player");
@@ -35,10 +42,13 @@ namespace Game.Tests
             {
                 InputSystem.Update();
                 yield return null;
+                // Batch-mode focus is not an input-test precondition.
+                go.SendMessage("OnApplicationFocus", true);
+                go.SendMessage("OnApplicationPause", false);
                 InputSystem.QueueStateEvent(pad, new GamepadState().WithButton(GamepadButton.North).WithButton(GamepadButton.South));
                 InputSystem.Update();
                 var first = input.ReadCommand();
-                Assert.IsTrue(first.SwitchPressed);
+                Assert.IsTrue(first.SwitchPressed, $"Switch pulse missing: held={first.AttackHeld}, north={pad.buttonNorth.isPressed}");
                 Assert.IsTrue(first.AttackHeld);
                 go.SendMessage("OnApplicationFocus", true);
                 go.SendMessage("OnApplicationPause", false);
@@ -63,6 +73,10 @@ namespace Game.Tests
                 Object.DestroyImmediate(asset);
                 InputSystem.RemoveDevice(pad);
                 InputSystem.settings.updateMode = previousMode;
+                InputSystem.settings.backgroundBehavior = previousBackground;
+#if UNITY_EDITOR
+                InputSystem.settings.editorInputBehaviorInPlayMode = previousEditorBehavior;
+#endif
             }
         }
 

@@ -53,7 +53,7 @@ namespace Game.Combat
             bool beforeReload = State.IsReloading, beforeSelected = State.Selected;
 
             if (command.SwitchPressed) State.SetSelected(!State.Selected);
-            State.Advance(Time.deltaTime);
+            State.Advance(Time.deltaTime, command.AttackHeld);
             var target = selector.Select(transform.position, State.IsMelee ? MeleeAttack.Radius : definition.TargetRange, identity.ActorId);
             if (target != null)
             {

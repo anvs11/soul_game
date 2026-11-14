@@ -4,11 +4,13 @@ namespace Game.Combat
     public sealed class WeaponRuntimeState
     {
         private readonly WeaponDefinition definition;
-        private float cooldown, reloadRemaining, meleeCooldown;
+        private float cooldown, reloadRemaining, meleeCooldown, knifeRecoveryDelay;
         public const float MaximumStamina = 100f;
         public const float MeleeCost = 20f;
         public const float MeleeInterval = .45f;
         public const float StaminaRecoveryPerSecond = 25f;
+        public const float KnifeRecoveryPerSecond = 10f;
+        public const float KnifeRecoveryPause = .8f;
         public float Stamina { get; private set; } = MaximumStamina;
         public float MaxStamina => MaximumStamina;
         public bool IsMelee => !Selected;
@@ -29,12 +31,19 @@ namespace Game.Combat
         private static bool Positive(float value) => value > 0 && !float.IsInfinity(value) && !float.IsNaN(value);
         public void SetSelected(bool selected) { Selected = selected; if (!selected) reloadRemaining = 0; }
         public void CancelReload() => reloadRemaining = 0;
-        public void Advance(float deltaTime)
+        public void Advance(float deltaTime, bool attackHeld = false)
         {
             if (float.IsNaN(deltaTime) || float.IsInfinity(deltaTime) || deltaTime < 0) throw new ArgumentOutOfRangeException(nameof(deltaTime));
             cooldown = Math.Max(0, cooldown - deltaTime);
             meleeCooldown = Math.Max(0, meleeCooldown - deltaTime);
-            if (!Selected) return;
+            float knifeRecoveryTime = Math.Max(0, deltaTime - knifeRecoveryDelay);
+            knifeRecoveryDelay = Math.Max(0, knifeRecoveryDelay - deltaTime);
+            if (!Selected)
+            {
+                if (attackHeld) knifeRecoveryDelay = KnifeRecoveryPause;
+                else Stamina = Math.Min(MaximumStamina, Stamina + KnifeRecoveryPerSecond * knifeRecoveryTime);
+                return;
+            }
             Stamina = Math.Min(MaximumStamina, Stamina + StaminaRecoveryPerSecond * deltaTime);
             if (IsReloading)
             {
@@ -53,6 +62,7 @@ namespace Game.Combat
             if (!IsMelee || meleeCooldown > .000001f || Stamina < MeleeCost) return false;
             Stamina -= MeleeCost;
             meleeCooldown = MeleeInterval;
+            knifeRecoveryDelay = KnifeRecoveryPause;
             return true;
         }
         public bool TryFire(IProjectileSpawner spawner, in ProjectileSpawnRequest request)
