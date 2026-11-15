@@ -59,3 +59,6 @@ ExecPlan `Game/Docs/Plans/S2_07_ROUTE_PLAN.md`. Явный список фикс
 Дополнительно после полного набора уточнена геометрия одного теста укрытия: бочка(-10.5,-3), герой(-7.5,-3), оба снаружи по разные стороны CoverA. Только этот изменённый сценарий повторно выполнен: discovered/executed/passed1/1/1, failed/skipped/inconclusive0, exit0, XML `Game/TestResults/s207-cover-cce3627863f240e891bd5a80ecd8503d/PlayMode.xml`. Это повтор одного из78 случаев, а не79 различных тестов.
 
 Первый XML исправлений `Game/TestResults/s207-feedback-51d18252d7a949589d268e67e15d71cc/PlayMode.xml`: discovered/executed81/81, passed80, failed1, skipped/inconclusive0, exit2. Единственный провал был прежним ожидаемым правилом фиксированного направления в AutoAimEnemyTests.AimUsesMovementUntilFirstTargetThenKeepsLastTargetDirection. Это правило изменено явно: тест переименован AimFollowsMovementWithoutTargetAndKeepsEnemyPriority, проверяет приоритет живой цели, сохранение направления стоя, разворот без цели и сохранение нового направления после остановки. Foundation не менялись. Финальный XML выше81/81.
+
+
+Ручная приёмка: 15 ноября 2026 пользователь подтвердил после исправлений: всё работает. Автоматические проверки81/81 PlayMode сохранены выше. Изменения передаются товарищу через feat/stage2-arenas; Android/standalone и независимое ревью остаются открытыми.
