@@ -173,6 +173,46 @@ namespace Game.Tests
                 if(i<9)yield return StartRoute();
             }
         }
+        [UnityTest] public IEnumerator DefeatedVariantsHideAllVisualMarkers()
+        {
+            foreach(var name in new[]{"HiddenZombie","FarZombie"})
+            {
+                var actor=GameObject.Find(name);
+                var renderers=actor.GetComponentsInChildren<SpriteRenderer>(true);
+                Assert.That(renderers.Length,Is.GreaterThan(1),"Real scene must include child marks");
+                actor.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1,1000));
+                foreach(var renderer in renderers)Assert.That(renderer.enabled,Is.False,"Death left a visible mark: "+renderer.name);
+                var behaviour=name=="HiddenZombie" ? (MonoBehaviour)actor.GetComponent<JumpingEnemy>() : actor.GetComponent<ShootingEnemy>();
+                behaviour.enabled=false;behaviour.enabled=true;
+                foreach(var renderer in actor.GetComponentsInChildren<SpriteRenderer>(true))Assert.That(renderer.enabled,Is.False);
+            }
+            Assert.That(arena.RemainingEnemies,Is.EqualTo(1));yield return null;
+        }
+        [UnityTest] public IEnumerator AfterTargetDeathMovementAimsKnifeIntoActualBarrel() => AttackBarrelAfterTargetDeath(true);
+        [UnityTest] public IEnumerator AfterTargetDeathMovementAimsBulletIntoActualBarrel() => AttackBarrelAfterTargetDeath(false);
+        private IEnumerator AttackBarrelAfterTargetDeath(bool melee)
+        {
+            foreach(var target in arena.Combatants)((MonoBehaviour)target).enabled=false;
+            var hero=arena.Player;var weapon=hero.GetComponent<WeaponController>();var input=hero.GetComponent<MovementTestInput>();
+            var barrel=Object.FindFirstObjectByType<ExplosiveBarrel>();
+            hero.transform.position=barrel.transform.position+Vector3.up*1.5f;hero.GetComponent<Rigidbody2D>().position=hero.transform.position;
+            weapon.State.SetSelected(!melee);
+            var targetObject=GameObject.Find("NearZombie");targetObject.transform.position=hero.transform.position+Vector3.right*.9f;
+            targetObject.GetComponent<Rigidbody2D>().position=targetObject.transform.position;targetObject.GetComponent<SandboxEnemy>().enabled=true;
+            Physics2D.SyncTransforms();yield return null;yield return null;
+            Assert.That(Vector2.Dot(weapon.AimDirection,Vector2.right),Is.GreaterThan(.95f),"First acquire real enemy to reproduce sticky aim");
+            ClearArena();
+            hero.transform.position=barrel.transform.position+Vector3.up;hero.GetComponent<Rigidbody2D>().position=hero.transform.position;Physics2D.SyncTransforms();
+            input.Command=new PlayerCommand(Vector2.down);yield return null;yield return null;
+            Assert.That(Vector2.Dot(weapon.AimDirection,Vector2.down),Is.GreaterThan(.99f),"Movement must replace aim at a dead enemy");
+            input.Command=default;yield return null;
+            Assert.That(Vector2.Dot(weapon.AimDirection,Vector2.down),Is.GreaterThan(.99f),"Keep facing barrel when stopping");
+            input.Command=new PlayerCommand(Vector2.zero,attackHeld:true);yield return null;yield return null;
+            input.Command=default;yield return new WaitForSeconds(.3f);
+            Assert.That(barrel.ExplosionCount,Is.EqualTo(1),"Real weapon must hit barrel after turning away from last enemy");
+            Assert.That(hero.ReadSnapshot().Health,Is.EqualTo(80));Assert.That(hero.ReadSnapshot().Armor,Is.Zero);
+            Assert.That(hero.GetComponent<ActorMotor2D>().StunRemaining,Is.GreaterThan(1));Assert.That(arena.RemainingEnemies,Is.Zero);
+        }
         private static void AssertContext()
         {
             Assert.That(Object.FindObjectsByType<GameBootstrap>(FindObjectsSortMode.None).Length,Is.EqualTo(1));

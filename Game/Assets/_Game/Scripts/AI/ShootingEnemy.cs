@@ -93,7 +93,8 @@ namespace Game.AI
         {
             if(deathSent)return;deathSent=true;ResetAttack();Phase=AttackPhase.Dead;ClearShots();Detach();
             body.simulated=false;foreach(var collider in GetComponentsInChildren<Collider2D>())collider.enabled=false;
-            if(skin!=null)skin.enabled=false;Died?.Invoke();
+            foreach(var renderer in GetComponentsInChildren<SpriteRenderer>(true))renderer.enabled=false;
+            Died?.Invoke();
         }
     }
 }

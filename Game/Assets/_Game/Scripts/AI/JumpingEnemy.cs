@@ -157,7 +157,8 @@ namespace Game.AI
         {
             if(deathSent)return;deathSent=true;ResetAttack();Phase=AttackPhase.Dead;
             body.simulated=false;foreach(var c in GetComponentsInChildren<Collider2D>())c.enabled=false;
-            if(skin!=null)skin.enabled=false;Unregister();Died?.Invoke();
+            foreach(var renderer in GetComponentsInChildren<SpriteRenderer>(true))renderer.enabled=false;
+            Unregister();Died?.Invoke();
         }
     }
 }

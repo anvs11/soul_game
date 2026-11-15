@@ -104,7 +104,7 @@ namespace Game.Tests
             }
             finally { Object.DestroyImmediate(enemy.gameObject); Object.DestroyImmediate(player); Object.DestroyImmediate(root); }
         }
-        [UnityTest] public IEnumerator AimUsesMovementUntilFirstTargetThenKeepsLastTargetDirection()
+        [UnityTest] public IEnumerator AimFollowsMovementWithoutTargetAndKeepsEnemyPriority()
         {
             var root = new GameObject("Fallback registry"); var registry = root.AddComponent<TargetRegistry>();
             var player = new GameObject("Fallback player"); player.SetActive(false);
@@ -126,11 +126,19 @@ namespace Game.Tests
                 target = Enemy((Vector2)player.transform.position + Vector2.up * 2, registry);
                 Physics2D.SyncTransforms(); yield return null; yield return null;
                 Vector2 remembered = controller.AimDirection; Assert.That(remembered.y, Is.GreaterThan(.99f));
-                target.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(0, 30));
-                Assert.That(player.GetComponent<AutoAimSelector>().CurrentTarget, Is.Null);
                 input.Next = new PlayerCommand(Vector2.left);
                 yield return null; yield return null;
-                Assert.That(controller.AimDirection, Is.EqualTo(remembered));
+                Assert.That(controller.AimDirection.y, Is.GreaterThan(.99f), "A living target still overrides movement aim.");
+                remembered = controller.AimDirection;
+                target.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(0, 30));
+                Assert.That(player.GetComponent<AutoAimSelector>().CurrentTarget, Is.Null);
+                yield return null; yield return null;
+                Assert.That(controller.AimDirection, Is.EqualTo(remembered), "Without movement keep the last direction.");
+                input.Next = new PlayerCommand(Vector2.left);
+                yield return null; yield return null;
+                Assert.That(controller.AimDirection, Is.EqualTo(Vector2.left), "After target death movement must turn the weapon.");
+                yield return null; yield return null;
+                Assert.That(controller.AimDirection, Is.EqualTo(Vector2.left), "Stopping keeps the new direction.");
             }
             finally
             {
