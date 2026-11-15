@@ -19,7 +19,7 @@ namespace Game.AI
         private TargetRegistry registry;
         private Transform player;
         private float timer;
-        private bool consumed,deathSent,started;
+        private bool consumed,deathSent,started,landingPending;
         private SpriteRenderer skin,signal;
         private readonly List<RaycastHit2D> hits=new List<RaycastHit2D>();
         private readonly List<(Collider2D a,Collider2D b)> pairs=new List<(Collider2D,Collider2D)>();
@@ -63,7 +63,7 @@ namespace Game.AI
         private void OnDisable(){Unregister();RestoreContacts();if(health!=null)health.DamageApplied-=OnDamage;ResetAttack();}
         private void ResetAttack()
         {
-            Ensure();timer=0;consumed=false;DashDirection=Vector2.zero;
+            Ensure();timer=0;consumed=false;landingPending=false;DashDirection=Vector2.zero;
             Phase=IsDead?AttackPhase.Dead:AttackPhase.Idle;
             body.linearVelocity=Vector2.zero;perception.ResetMemory();ShowSignal(false);
         }
@@ -106,6 +106,7 @@ namespace Game.AI
                 return;
             }
             if(Phase==AttackPhase.Dash){DashStep();return;}
+            if(landingPending){landingPending=false;Land();}
             timer-=Time.fixedDeltaTime;
             if(Phase==AttackPhase.Windup)
             {
@@ -141,8 +142,31 @@ namespace Game.AI
             }
             body.linearVelocity=DashDirection*(distance/Time.fixedDeltaTime);
             timer-=Time.fixedDeltaTime;
-            if(timer<=0||blocked){Phase=AttackPhase.Recovery;timer=definition.Recovery;}
+            if(timer<=0||blocked){Phase=AttackPhase.Recovery;timer=definition.Recovery;landingPending=true;}
         }
+        private void Land()
+        {
+            if(consumed || targetHealth==null || targetHealth.IsDead)return;
+            var filter=new ContactFilter2D{useTriggers=false};filter.SetLayerMask(damageMask);
+            var overlaps=new List<Collider2D>();
+            Physics2D.OverlapBox(body.position,new Vector2(3,3),0,filter,overlaps);
+            foreach(var collider in overlaps)
+            {
+                if(collider.GetComponentInParent<DamageReceiver>()!=targetHealth)continue;
+                var targetIdentity=collider.GetComponentInParent<ActorIdentity>();
+                if(targetIdentity!=null&&targetIdentity.Faction==identity.Faction)continue;
+                Vector2 offset=(Vector2)targetHealth.transform.position-body.position;
+                filter.SetLayerMask(worldMask);
+                Physics2D.Raycast(body.position,offset.normalized,filter,hits,offset.magnitude);
+                foreach(var hit in hits)
+                    if(hit.collider!=null&&hit.collider.GetComponentInParent<ActorIdentity>()==null)return;
+                consumed=true;
+                var result=targetHealth.ApplyDamage(new DamagePacket(ActorId,definition.Damage));
+                if(result.Applied&&!result.Killed)player.GetComponent<ActorMotor2D>()?.BeginKnockback(offset.normalized,definition.Knockback);
+                return;
+            }
+        }
+
         private void OnDamage(DamageResult result){if(result.Killed)Die();}
         private void Die()
         {

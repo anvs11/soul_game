@@ -98,6 +98,18 @@ namespace Game.Tests
             foe.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1,100));var position=foe.transform.position;
             yield return new WaitForSeconds(.5f);Assert.That(foe.transform.position,Is.EqualTo(position));Assert.That(deaths,Is.EqualTo(1));Assert.That(registry.Count,Is.Zero);
         }
+        [UnityTest] public IEnumerator LandingCoversAllNineCellCentersWithOneDamageEach()
+        {
+            for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++)
+            {
+                Setup();yield return Until(JumpingEnemy.AttackPhase.Windup);
+                hero.transform.position=origin+new Vector2(3.6f+x,y);Physics2D.SyncTransforms();
+                yield return Until(JumpingEnemy.AttackPhase.Recovery);
+                yield return new WaitForFixedUpdate();yield return new WaitForFixedUpdate();
+                Assert.That(health.Health,Is.EqualTo(990),"Cell "+x+","+y);
+                yield return Cleanup();
+            }
+        }
         [UnityTearDown] public IEnumerator Cleanup()
         {
             Time.timeScale=1;if(foe!=null)Object.Destroy(foe);if(hero!=null)Object.Destroy(hero);if(root!=null)Object.Destroy(root);if(wall!=null)Object.Destroy(wall);if(definition!=null)Object.Destroy(definition);yield return null;
