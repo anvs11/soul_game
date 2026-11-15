@@ -48,6 +48,14 @@ namespace Game.Actors
                 resources?.Stamina ?? 100f, resources?.MaxStamina ?? 100f, resources?.Magazine ?? 0, resources?.MagazineCapacity ?? 1,
                 resources?.ReserveAmmo ?? 0, resources?.IsMelee ?? false, resources?.IsReloading ?? false, receiver.IsDead);
         }
+        public void RestoreForEncounter(CombatSnapshot snapshot)
+        {
+            EnsureReferences();
+            if (deathSent || snapshot.IsDead) throw new InvalidOperationException("Cannot transfer a dead hero.");
+            receiver.RestoreForEncounter(snapshot.Health, snapshot.Armor);
+            weapon.State.RestoreForEncounter(snapshot.Magazine, snapshot.ReserveAmmo, snapshot.Stamina, snapshot.IsMelee);
+            PublishState();
+        }
         public void SetControlsEnabled(bool enabled)
         {
             EnsureReferences(); controlsEnabled = enabled;

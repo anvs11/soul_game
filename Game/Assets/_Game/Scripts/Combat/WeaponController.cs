@@ -17,7 +17,6 @@ namespace Game.Combat
         private DamageReceiver health;
         private MeleeAttack melee;
         private AutoAimSelector selector;
-        private bool hasAimedAtTarget;
         public Vector2 AimDirection => aim;
         private bool controlsEnabled = true;
         private Vector2 aim = Vector2.down;
@@ -58,9 +57,9 @@ namespace Game.Combat
             if (target != null)
             {
                 Vector2 offset = target.transform.position - transform.position;
-                if (offset.sqrMagnitude > .0001f) { aim = offset.normalized; hasAimedAtTarget = true; }
+                if (offset.sqrMagnitude > .0001f) { aim = offset.normalized; }
             }
-            else if (!hasAimedAtTarget && command.Move.sqrMagnitude > .0001f) aim = command.Move.normalized;
+            else if (command.Move.sqrMagnitude > .0001f) aim = command.Move.normalized;
             if (command.AttackHeld && State.Selected)
             {
                 var request = new ProjectileSpawnRequest(transform.position, aim, definition.ProjectileSpeed,

@@ -6,22 +6,22 @@ namespace Game.Combat
 {
     public sealed class TargetRegistry : MonoBehaviour
     {
-        internal readonly HashSet<SandboxEnemy> Targets = new HashSet<SandboxEnemy>();
+        internal readonly HashSet<IEnemyTarget> Targets = new HashSet<IEnemyTarget>();
         public int Count => Targets.Count;
-        public event Action<SandboxEnemy> Removed;
+        public event Action<IEnemyTarget> Removed;
         public event Action Reactivated;
         private void OnEnable() => Reactivated?.Invoke();
-        public void Register(SandboxEnemy enemy)
+        public void Register(IEnemyTarget enemy)
         {
-            if (isActiveAndEnabled && enemy != null && enemy.isActiveAndEnabled && !enemy.IsDead) Targets.Add(enemy);
+            if (isActiveAndEnabled && EnemyTargets.Active(enemy)) Targets.Add(enemy);
         }
-        public void Unregister(SandboxEnemy enemy)
+        public void Unregister(IEnemyTarget enemy)
         {
             if (Targets.Remove(enemy)) Removed?.Invoke(enemy);
         }
         private void OnDisable()
         {
-            var previous = new List<SandboxEnemy>(Targets);
+            var previous = new List<IEnemyTarget>(Targets);
             Targets.Clear();
             foreach (var enemy in previous) Removed?.Invoke(enemy);
         }

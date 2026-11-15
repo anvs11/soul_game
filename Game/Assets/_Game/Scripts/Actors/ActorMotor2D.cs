@@ -9,7 +9,7 @@ namespace Game.Actors
     public sealed class ActorMotor2D : MonoBehaviour
     {
         [SerializeField] private MonoBehaviour inputSource;
-        [SerializeField, Min(0f)] private float speed = 5f;
+        [SerializeField, Min(0f)] private float speed = 5.5f;
         private Rigidbody2D body;
         private IPlayerInputSource source;
         private bool controlsEnabled = true;
@@ -34,8 +34,17 @@ namespace Game.Actors
             inputSource = provider;
         }
 
+        public float StunRemaining { get; private set; }
+        public void Stun(float seconds)
+        {
+            if (seconds < 0 || float.IsNaN(seconds) || float.IsInfinity(seconds)) throw new ArgumentOutOfRangeException(nameof(seconds));
+            if (!controlsEnabled || !isActiveAndEnabled) return;
+            StunRemaining = Mathf.Max(StunRemaining, seconds);
+            if (GetComponent<StunStars>() == null) gameObject.AddComponent<StunStars>();
+        }
         private void Update()
         {
+            StunRemaining = Mathf.Max(0, StunRemaining - Time.deltaTime);
             var command = source.ReadCommand();
             CurrentCommand = controlsEnabled && Time.timeScale > 0 ? command : new PlayerCommand(Vector2.zero, pausePressed: command.PausePressed);
             CommandSampled?.Invoke(CurrentCommand);
@@ -66,7 +75,7 @@ namespace Game.Actors
                 knockRemaining = Mathf.Max(0,knockRemaining-Time.fixedDeltaTime);
                 return;
             }
-            body.linearVelocity = controlsEnabled ? Vector2.ClampMagnitude(CurrentCommand.Move,1f)*speed : Vector2.zero;
+            body.linearVelocity = controlsEnabled && StunRemaining <= 0 ? Vector2.ClampMagnitude(CurrentCommand.Move,1f)*speed : Vector2.zero;
         }
 
         public void SetControlsEnabled(bool value)
@@ -74,6 +83,7 @@ namespace Game.Actors
             controlsEnabled = value;
             CurrentCommand = default;
             knockRemaining = 0;
+            StunRemaining = 0;
             if (body != null) body.linearVelocity = Vector2.zero;
         }
 
@@ -81,6 +91,7 @@ namespace Game.Actors
         {
             CurrentCommand = default;
             knockRemaining = 0;
+            StunRemaining = 0;
             if (body != null) body.linearVelocity = Vector2.zero;
         }
     }

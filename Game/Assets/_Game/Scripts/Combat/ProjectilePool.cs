@@ -45,7 +45,8 @@ namespace Game.Combat
             if (!active.Remove(projectile)) return;
             pool.Release(projectile);
         }
-        private void OnDisable()
+        private void OnDisable() => ClearActive();
+        public void ClearActive()
         {
             // Despawn removes its own entry; no enumerator is kept over the changing set.
             while (active.Count > 0)

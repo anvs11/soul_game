@@ -5,12 +5,12 @@ namespace Game.UI
     public sealed class HomeScreen : FlowScreen
     {
         public bool IsShowingResult { get; private set; }
-        private bool diagnostic;
+        private bool diagnostic, stage2;
         private RunOutcome? outcome;
         protected override void OnBound(RunCoordinator value)
-        { outcome=value.LastOutcome; IsShowingResult=outcome.HasValue; diagnostic=value.CurrentRequest.IsStage2Diagnostic; }
+        { outcome=value.LastOutcome; IsShowingResult=outcome.HasValue; diagnostic=value.CurrentRequest.IsStage2Diagnostic; stage2=value.CurrentRequest.IsStage2Route; }
         protected override string Title => IsShowingResult
-            ? (diagnostic ? "Stage 2: проверка завершена" : outcome==RunOutcome.Victory ? "Победа" : outcome==RunOutcome.Defeat ? "Поражение" : "Вылазка завершена") : "Убежище";
+            ? (diagnostic ? "Stage 2: проверка завершена" : outcome==RunOutcome.Victory ? (stage2 ? "Stage 2: победа" : "Победа") : outcome==RunOutcome.Defeat ? "Поражение" : "Вылазка завершена") : "Убежище";
         protected override string Description => IsShowingResult
             ? (diagnostic ? "Диагностическая арена, без босса и наград. Итог: " + OutcomeLabel : "Попытка завершена. Награды на этом этапе не начисляются.")
             : "Зачистите арену, подойдите к выходу и нажмите E.";
@@ -23,10 +23,11 @@ namespace Game.UI
             else value.StartRun(RunRequest.Sandbox());
         }
         protected override string SecondaryLabel => Application.CanStreamedLevelBeLoaded(ScenePaths.Stage2CombatSandbox)
-            ? "Stage 2: проверка обнаружения" : null;
+            && Application.CanStreamedLevelBeLoaded(ScenePaths.Stage2BossSandbox)
+            ? "Stage 2: арена и полицейский" : null;
         protected override bool ShowSecondary => !IsShowingResult;
         protected override bool CanSecondaryAct(RunCoordinator value) => value.Phase==RunPhase.Home && !IsShowingResult;
-        protected override void ActSecondary(RunCoordinator value) => value.StartRun(RunRequest.Stage2Diagnostic());
+        protected override void ActSecondary(RunCoordinator value) => value.StartRun(RunRequest.Stage2());
         protected override string Message(RunCoordinator value) => value.Phase==RunPhase.Home ? "WASD · Space · Q · E" : "Переходим на арену…";
     }
 }

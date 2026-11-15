@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e200f43fbc1e327418d270a3dc860377, type: 3}
+  m_Name: ShootingEnemyDefinition
+  m_EditorClassIdentifier: Game.Runtime::Game.AI.ShootingEnemyDefinition
+  Health: 30
+  Speed: 2.5
+  PreferredRange: 6
+  MinimumRange: 4
+  FireRange: 8
+  Windup: 0.35
+  Interval: 0.8
+  ProjectileSpeed: 8
+  ProjectileLifetime: 3
+  Damage: 10

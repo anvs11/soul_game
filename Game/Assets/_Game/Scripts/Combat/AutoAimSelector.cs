@@ -10,8 +10,8 @@ namespace Game.Combat
         [SerializeField] private TargetRegistry registry;
         [SerializeField] private LayerMask obstructionMask = ~0;
         private readonly List<RaycastHit2D> hits = new List<RaycastHit2D>(16);
-        private SandboxEnemy current;
-        public SandboxEnemy CurrentTarget => current != null && current.isActiveAndEnabled && !current.IsDead ? current : null;
+        private IEnemyTarget current;
+        public IEnemyTarget CurrentTarget => EnemyTargets.Active(current) ? current : null;
         public void Configure(TargetRegistry value)
         {
             if (registry != null) registry.Removed -= OnRemoved;
@@ -20,8 +20,8 @@ namespace Game.Combat
         }
         private void OnEnable() { if (registry != null) registry.Removed += OnRemoved; }
         private void OnDisable() { if (registry != null) registry.Removed -= OnRemoved; current = null; hits.Clear(); }
-        private void OnRemoved(SandboxEnemy value) { if (current == value) current = null; }
-        public SandboxEnemy Select(Vector2 origin, float radius, int ownerActorId)
+        private void OnRemoved(IEnemyTarget value) { if (current == value) current = null; }
+        public IEnemyTarget Select(Vector2 origin, float radius, int ownerActorId)
         {
             current = null;
             if (!isActiveAndEnabled || registry == null || !registry.isActiveAndEnabled || radius <= 0) return null;
@@ -29,7 +29,7 @@ namespace Game.Combat
             int bestId = int.MaxValue;
             foreach (var candidate in registry.Targets)
             {
-                if (candidate == null || !candidate.isActiveAndEnabled || candidate.IsDead || candidate.ActorId == ownerActorId) continue;
+                if (!EnemyTargets.Active(candidate) || candidate.ActorId == ownerActorId) continue;
                 Vector2 offset = (Vector2)candidate.transform.position - origin;
                 float distance = offset.sqrMagnitude;
                 if (distance > radius * radius) continue;

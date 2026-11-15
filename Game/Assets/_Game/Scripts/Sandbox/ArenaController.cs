@@ -13,11 +13,17 @@ namespace Game.Sandbox
     {
         [SerializeField] private PlayerCombatFacade player;
         [SerializeField] private SandboxEnemy[] enemies;
+        [SerializeField] private MonoBehaviour[] mixedEnemies;
+        private readonly List<IEnemyTarget> combatants = new List<IEnemyTarget>();
+        private readonly List<MonoBehaviour> enemyBehaviours = new List<MonoBehaviour>();
+        public IReadOnlyList<IEnemyTarget> Combatants => combatants;
         [SerializeField] private TargetRegistry registry;
         [SerializeField] private HudPresenter hud;
         [SerializeField] private Transform exit;
         private readonly HashSet<IDefeatable> alive = new HashSet<IDefeatable>();
         private RunCoordinator run;
+        private PoliceBoss boss;
+        private bool IsBossEncounter => boss != null;
         private BattleControls controls;
         public bool IsPaused { get; private set; }
         public BattleControls Controls => controls;
@@ -38,17 +44,39 @@ namespace Game.Sandbox
         protected override void Act(RunCoordinator value) { }
         protected override string Message(RunCoordinator value) => "";
         public void Configure(PlayerCombatFacade hero, SandboxEnemy[] targets, TargetRegistry targetsRegistry, HudPresenter view, Transform door)
-        { player = hero; enemies = targets; registry = targetsRegistry; hud = view; exit = door; }
+        { player = hero; enemies = targets; mixedEnemies = null; registry = targetsRegistry; hud = view; exit = door; }
+        public void ConfigureMixed(PlayerCombatFacade hero, MonoBehaviour[] targets, TargetRegistry targetsRegistry, HudPresenter view, Transform door)
+        { player = hero; mixedEnemies = targets; registry = targetsRegistry; hud = view; exit = door; }
         protected override void OnBound(RunCoordinator value)
         {
             DetachCombat();
-            if (player == null || enemies == null || enemies.Length != 3 || registry == null || hud == null || exit == null)
-                throw new System.InvalidOperationException("Arena requires player, three enemies, registry, HUD and exit.");
-            foreach (var enemy in enemies)
-                if (enemy == null || !alive.Add(enemy)) throw new System.InvalidOperationException("Unique enemy references required.");
+            MonoBehaviour[] sources = mixedEnemies != null && mixedEnemies.Length > 0 ? mixedEnemies : enemies;
+            boss = sources != null && sources.Length == 1 ? sources[0] as PoliceBoss : null;
+            if (player == null || sources == null || (sources.Length != 3 && boss == null) || registry == null || hud == null || exit == null)
+                throw new System.InvalidOperationException("Arena requires player, three enemies or one boss, registry, HUD and exit.");
+            foreach (var source in sources)
+            {
+                if (source == null || !(source is IEnemyTarget enemy) || !alive.Add(enemy))
+                    throw new System.InvalidOperationException("Unique enemy components required.");
+                combatants.Add(enemy);
+                enemyBehaviours.Add(source);
+            }
             run = value;
+            player.SetControlsEnabled(false);
+            if (IsBossEncounter && value.PlayerTransfer.HasValue) player.RestoreForEncounter(value.PlayerTransfer.Value);
             player.GetComponent<AutoAimSelector>().Configure(registry);
-            foreach (var enemy in enemies) { enemy.Initialize(registry, player.transform); enemy.Died += OnEnemyDied; }
+            foreach (var enemy in combatants)
+            {
+                switch (enemy)
+                {
+                    case PoliceBoss police: police.Initialize(registry, player.transform); break;
+                    case SandboxEnemy melee: melee.Initialize(registry, player.transform); break;
+                    case JumpingEnemy jumper: jumper.Initialize(registry, player.transform); break;
+                    case ShootingEnemy shooter: shooter.Initialize(registry, player.transform); break;
+                    default: throw new System.InvalidOperationException("Unsupported arena enemy.");
+                }
+                enemy.Died += OnEnemyDied;
+            }
             controls=gameObject.GetComponent<BattleControls>() ?? gameObject.AddComponent<BattleControls>();
             controls.Initialize(TogglePause,Resume,Leave);
             if(UnityEngine.EventSystems.EventSystem.current!=null)UnityEngine.EventSystems.EventSystem.current.sendNavigationEvents=false;
@@ -58,47 +86,63 @@ namespace Game.Sandbox
             run.Changed += OnPhaseChanged;
             hud.SetHint("WASD: движение · Space: атака · Q: оружие · E: выход после зачистки");
             hud.Bind(player);
+            UpdateEncounter();
             if (run.CurrentRequest.IsStage2Diagnostic)
                 hud.SetHint("Stage 2 · диагностическая арена без босса · WASD / Space / Q / E");
+            if (run.CurrentRequest.IsStage2Route)
+                hud.SetHint(IsBossEncounter ? "Полицейский · уклоняйтесь от подготовки и очередей · Esc: пауза" : "Stage 2 · зачистите 3 врагов и идите к выходу E · осторожно: бочка");
             OnPhaseChanged();
         }
         private void OnEnemyDied()
         {
-            foreach (var enemy in enemies) if (enemy != null && enemy.IsDead) alive.Remove(enemy);
+            foreach (var enemy in combatants) if (enemy is MonoBehaviour component && component != null && enemy.IsDead) alive.Remove(enemy);
             if (exit != null) exit.GetComponent<SpriteRenderer>().color = alive.Count == 0 ? Color.green : Color.red;
+            UpdateEncounter();
+            if (IsBossEncounter && alive.Count == 0) run?.FinishRun(RunOutcome.Victory);
         }
         private void OnPlayerDied() => run?.FinishRun(RunOutcome.Defeat);
         public void TryExit()
         {
-            if (run == null || run.Phase != RunPhase.InArena || IsPaused || player.IsDead || alive.Count != 0) return;
-            if (Vector2.Distance(player.transform.position, exit.position) <= 1.5f) run.FinishRun(RunOutcome.Victory);
+            if (run == null || run.Phase != RunPhase.InArena || IsPaused || player.IsDead || alive.Count != 0 || IsBossEncounter) return;
+            if (Vector2.Distance(player.transform.position, exit.position) > 1.5f) return;
+            if (run.CurrentRequest.IsStage2Route) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot);
+            else run.FinishRun(RunOutcome.Victory);
         }
         private void OnPhaseChanged()
         {
-            bool active = run != null && run.Phase == RunPhase.InArena;
+            bool active = run != null && run.Phase == RunPhase.InArena && player != null && !player.IsDead;
             if (player != null) player.SetControlsEnabled(active);
-            if (!active && enemies != null)
-                foreach (var enemy in enemies) if (enemy != null) enemy.enabled = false;
-
-            if (active && enemies != null)
-                foreach (var enemy in enemies) if (enemy != null && !enemy.IsDead) enemy.enabled = true;
+            foreach (var enemy in enemyBehaviours)
+                if (enemy != null) enemy.enabled = active && !((IEnemyTarget)enemy).IsDead;
+            if (!active)
+            {
+                controls?.ClearHeld(); IsPaused = false; Time.timeScale = 1;
+                foreach (var root in gameObject.scene.GetRootGameObjects())
+                    foreach (var pool in root.GetComponentsInChildren<ProjectilePool>(true)) pool.ClearActive();
+            }
         }
         private void DetachCombat()
         {
             controls?.ClearHeld(); IsPaused=false; Time.timeScale=1;
             if (run != null) run.Changed -= OnPhaseChanged;
             if (player != null) { player.PauseRequested -= TogglePause; player.Died -= OnPlayerDied; player.InteractRequested -= TryExit; player.SetControlsEnabled(false); }
-            if (enemies != null) foreach (var enemy in enemies) if (enemy != null) enemy.Died -= OnEnemyDied;
+            foreach (var enemy in combatants) if (enemy is MonoBehaviour component && component != null) enemy.Died -= OnEnemyDied;
+            combatants.Clear(); enemyBehaviours.Clear();
             if (hud != null) hud.Unbind();
             alive.Clear(); run = null;
         }
         protected override void OnDisable() { DetachCombat(); base.OnDisable(); }
         protected override void OnDestroy() { DetachCombat(); base.OnDestroy(); }
-        private void OnGUI()
+        private void Update()
         {
-            if (run == null || run.Phase != RunPhase.InArena) return;
-            GUI.Label(new Rect(Screen.width / 2 - 200, 15, 500, 35),
-                alive.Count > 0 ? "Зомби осталось: " + alive.Count : "Выход открыт: подойдите к зелёному квадрату и нажмите E");
+            if (IsBossEncounter && hud != null && !boss.IsDead)
+                hud.SetEncounter("Полицейский: " + boss.GetComponent<DamageReceiver>().Health + "/" + boss.GetComponent<DamageReceiver>().MaxHealth + " · стадия " + boss.Level);
+        }
+        private void UpdateEncounter()
+        {
+            if (hud != null) hud.SetEncounter(alive.Count > 0
+                ? "Зомби осталось " + alive.Count
+                : "Выход открыт. Подойдите к зелёному квадрату и нажмите E");
         }
     }
 }

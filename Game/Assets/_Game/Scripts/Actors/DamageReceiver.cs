@@ -28,12 +28,21 @@ namespace Game.Actors
                 throw new ArgumentOutOfRangeException(nameof(protection));
             initialHealth = validated.MaxHealth; initialArmor = validated.MaxArmor; protectionSeconds = protection;
         }
+        public void RestoreForEncounter(float health, float armor)
+        {
+            if (State.IsDead || State.CurrentHealth != State.MaxHealth || State.CurrentArmor != State.MaxArmor)
+                throw new InvalidOperationException("Restore only a fresh encounter receiver.");
+            var restored = new HealthState(initialHealth, initialArmor);
+            restored.RestoreForEncounter(health, armor);
+            state = restored;
+            protectedUntil = 0;
+        }
         public DamageResult ApplyDamage(in DamagePacket packet)
         {
             if (!isActiveAndEnabled || Time.timeAsDouble < protectedUntil) return default;
             var result = State.ApplyDamage(in packet);
             if (!result.Applied) return result;
-            protectedUntil = Time.timeAsDouble + protectionSeconds;
+            protectedUntil = Time.timeAsDouble + (packet.ProtectionSecondsOverride ?? protectionSeconds);
             DamageApplied?.Invoke(result);
             return result;
         }

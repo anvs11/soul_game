@@ -8,6 +8,7 @@ namespace Game.Core
         public const string Home = "Home";
         public const string CombatSandbox = "CombatSandbox";
         public const string Stage2CombatSandbox = "Stage2CombatSandbox";
+        public const string Stage2BossSandbox = "Stage2BossSandbox";
         public const string Folder = "Assets/_Game/Scenes/";
         public static string Asset(string name) => Folder + name + ".unity";
     }
@@ -19,13 +20,17 @@ namespace Game.Core
     {
         public string ArenaId { get; }
         public int Seed { get; }
-        public bool IsStage2Diagnostic => ArenaId == ScenePaths.Stage2CombatSandbox;
+        public bool IsStage2Route { get; }
+        public bool IsStage2Diagnostic => ArenaId == ScenePaths.Stage2CombatSandbox && !IsStage2Route;
 
-        public RunRequest(string arenaId, int seed)
+        public RunRequest(string arenaId, int seed, bool isStage2Route = false)
         {
             ArenaId = arenaId;
             Seed = seed;
+            IsStage2Route = isStage2Route;
         }
+
+        public static RunRequest Stage2(int seed = 0) => new RunRequest(ScenePaths.Stage2CombatSandbox, seed, true);
 
         public static RunRequest Stage2Diagnostic(int seed = 0) => new RunRequest(ScenePaths.Stage2CombatSandbox, seed);
 
