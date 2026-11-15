@@ -7,6 +7,7 @@ namespace Game.Core
         public const string Bootstrap = "Bootstrap";
         public const string Home = "Home";
         public const string CombatSandbox = "CombatSandbox";
+        public const string Stage2CombatSandbox = "Stage2CombatSandbox";
         public const string Folder = "Assets/_Game/Scenes/";
         public static string Asset(string name) => Folder + name + ".unity";
     }
@@ -18,12 +19,15 @@ namespace Game.Core
     {
         public string ArenaId { get; }
         public int Seed { get; }
+        public bool IsStage2Diagnostic => ArenaId == ScenePaths.Stage2CombatSandbox;
 
         public RunRequest(string arenaId, int seed)
         {
             ArenaId = arenaId;
             Seed = seed;
         }
+
+        public static RunRequest Stage2Diagnostic(int seed = 0) => new RunRequest(ScenePaths.Stage2CombatSandbox, seed);
 
         public static RunRequest Sandbox(int seed = 0) =>
             new RunRequest(ScenePaths.CombatSandbox, seed);

@@ -88,11 +88,16 @@ namespace Game.Tests
                 yield return new WaitForFixedUpdate(); yield return new WaitForFixedUpdate();
                 Assert.That(enemy.GetComponent<Rigidbody2D>().linearVelocity.magnitude, Is.LessThanOrEqualTo(2.51f));
                 Assert.That(health.Armor, Is.EqualTo(30));
-                yield return new WaitForSeconds(.2f); Assert.That(health.Armor, Is.EqualTo(30));
+                yield return new WaitForSeconds(.08f); Assert.That(health.Armor, Is.EqualTo(30));
                 yield return new WaitForSeconds(.35f); Assert.That(health.Armor, Is.EqualTo(20));
-                health.ApplyDamage(new DamagePacket(0, 1000));
-                yield return new WaitForSeconds(.55f);
-                if (!health.IsDead) health.ApplyDamage(new DamagePacket(0, 1000));
+                // Respect real invulnerability without assuming the old attack cadence.
+                float deadline = Time.time + 2;
+                while (!health.IsDead)
+                {
+                    Assert.That(Time.time, Is.LessThan(deadline), "Lethal damage never passed protection.");
+                    health.ApplyDamage(new DamagePacket(0, 1000));
+                    yield return new WaitForFixedUpdate();
+                }
                 yield return new WaitForFixedUpdate(); yield return new WaitForFixedUpdate();
                 Assert.IsTrue(health.IsDead);
                 Assert.That(enemy.GetComponent<Rigidbody2D>().linearVelocity, Is.EqualTo(Vector2.zero));

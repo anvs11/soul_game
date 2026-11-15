@@ -29,14 +29,14 @@ namespace Game.Core
         public void StartRun(RunRequest request)
         {
             if (disposed || Phase != RunPhase.Home) return;
-            if (request.ArenaId != ScenePaths.CombatSandbox)
-                throw new ArgumentException("Only CombatSandbox is available.", nameof(request));
+            if (request.ArenaId != ScenePaths.CombatSandbox && request.ArenaId != ScenePaths.Stage2CombatSandbox)
+                throw new ArgumentException("Unknown arena profile.", nameof(request));
 
             CurrentRequest = request;
             RunId = Guid.NewGuid().ToString("N");
             LastOutcome = null;
             pendingOutcome = null;
-            Load(ScenePaths.CombatSandbox, RunPhase.LoadingArena, RunPhase.InArena);
+            Load(request.ArenaId, RunPhase.LoadingArena, RunPhase.InArena);
         }
 
         public void FinishRun(RunOutcome outcome)

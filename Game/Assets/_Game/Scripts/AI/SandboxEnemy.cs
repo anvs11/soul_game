@@ -16,6 +16,7 @@ namespace Game.AI
         private Rigidbody2D body;
         private ActorIdentity identity;
         private bool deathSent;
+        private EnemyPerception perception;
 
         public event Action Died;
         public bool IsDead { get { EnsureReferences(); return health.IsDead; } }
@@ -30,12 +31,16 @@ namespace Game.AI
         {
             if (registry != null) { registry.Reactivated -= RegisterAlive; registry.Unregister(this); }
             registry = targets; player = playerTransform; IgnoreTargetContact(); ResetAttack();
+            if (perception == null) perception = GetComponent<EnemyPerception>();
+            if (perception != null) perception.ResetMemory();
             playerHealth = player != null ? player.GetComponent<DamageReceiver>() : null;
             if (isActiveAndEnabled && registry != null) { registry.Reactivated += RegisterAlive; RegisterAlive(); }
         }
         private void OnEnable()
         {
             EnsureReferences();
+            perception = GetComponent<EnemyPerception>();
+            if (perception != null) perception.ResetMemory();
             playerHealth = player != null ? player.GetComponent<DamageReceiver>() : null;
             IgnoreTargetContact(); ResetAttack();
             health.DamageApplied += OnDamage;
@@ -46,6 +51,7 @@ namespace Game.AI
         private void OnDisable()
         {
             RestoreContact(); ResetAttack();
+            if (perception != null) perception.ResetMemory();
             if (health != null) health.DamageApplied -= OnDamage;
             if (registry != null) { registry.Reactivated -= RegisterAlive; registry.Unregister(this); }
             if (body != null) body.linearVelocity = Vector2.zero;
@@ -56,6 +62,7 @@ namespace Game.AI
         }
         public enum AttackPhase { Chase, Windup, Swing, Recover }
         public AttackPhase Phase { get; private set; }
+        private const float WindupDuration=.2f, SwingDuration=.06f, RecoveryDuration=.3f;
         private float phaseTime;
         private Vector2 strikeDirection;
         private SpriteRenderer arm;
@@ -120,26 +127,31 @@ namespace Game.AI
         private void FixedUpdate()
         {
             body.linearVelocity = Vector2.zero;
-            if (IsDead || player == null || playerHealth == null || playerHealth.IsDead) { ResetAttack(); return; }
-            Vector2 offset = (Vector2)player.position - body.position;
+            if (IsDead || player == null || !player.gameObject.activeInHierarchy || playerHealth == null || !playerHealth.isActiveAndEnabled || playerHealth.IsDead)
+            { ResetAttack(); if (perception != null) perception.ResetMemory(); return; }
+            bool sensing = perception != null;
+            if (sensing && !perception.Tick(player, playerHealth, Time.fixedDeltaTime)) { ResetAttack(); return; }
+            Vector2 pursuit = sensing ? perception.PursuitPosition : (Vector2)player.position;
+            Vector2 offset = pursuit - body.position;
+            if (sensing && !perception.HasLineOfSight) ResetAttack();
             if (Phase == AttackPhase.Chase)
             {
                 if (offset.magnitude > 1.1f)
                     body.linearVelocity = offset.normalized * Mathf.Min(speed, Mathf.Max(0,offset.magnitude-1.1f)/Time.fixedDeltaTime);
-                else if (ClearStrikePath(offset))
-                { strikeDirection = offset.sqrMagnitude > .0001f ? offset.normalized : Vector2.down; Phase = AttackPhase.Windup; phaseTime=.4f; ShowArm(-100); }
+                else if ((!sensing || perception.HasLineOfSight) && ClearStrikePath(offset))
+                { strikeDirection = offset.sqrMagnitude > .0001f ? offset.normalized : Vector2.down; Phase = AttackPhase.Windup; phaseTime=WindupDuration; ShowArm(-100); }
                 return;
             }
             phaseTime -= Time.fixedDeltaTime;
             if (Phase == AttackPhase.Windup)
             {
-                ShowArm(Mathf.Lerp(-100,-45,1-Mathf.Clamp01(phaseTime/.4f)));
-                if (phaseTime <= 0) { Strike(); Phase=AttackPhase.Swing; phaseTime=.12f; }
+                ShowArm(Mathf.Lerp(-100,-45,1-Mathf.Clamp01(phaseTime/WindupDuration)));
+                if (phaseTime <= 0) { Strike(); Phase=AttackPhase.Swing; phaseTime=SwingDuration; }
             }
             else if (Phase == AttackPhase.Swing)
             {
-                ShowArm(Mathf.Lerp(-45,65,1-Mathf.Clamp01(phaseTime/.12f)));
-                if (phaseTime <= 0) { Phase=AttackPhase.Recover; phaseTime=.6f; if(arm!=null)arm.enabled=false; }
+                ShowArm(Mathf.Lerp(-45,65,1-Mathf.Clamp01(phaseTime/SwingDuration)));
+                if (phaseTime <= 0) { Phase=AttackPhase.Recover; phaseTime=RecoveryDuration; if(arm!=null)arm.enabled=false; }
             }
             else if (phaseTime <= 0) ResetAttack();
         }
@@ -149,6 +161,7 @@ namespace Game.AI
         {
             if (deathSent) return;
             deathSent = true; ResetAttack();
+            if (perception != null) perception.ResetMemory();
             body.linearVelocity = Vector2.zero;
             body.simulated = false;
             foreach (var collider in GetComponentsInChildren<Collider2D>()) collider.enabled = false;

@@ -12,6 +12,11 @@ namespace Game.UI
         private bool subscribed;
         private Text status, titleLabel, descriptionLabel;
         public Button PrimaryButton { get; private set; }
+        public Button SecondaryButton { get; private set; }
+        protected virtual string SecondaryLabel => null;
+        protected virtual bool ShowSecondary => true;
+        protected virtual bool CanSecondaryAct(RunCoordinator value) => false;
+        protected virtual void ActSecondary(RunCoordinator value) { }
         protected virtual bool ShowView => true;
         protected virtual void OnBound(RunCoordinator value) { }
         protected abstract string Title { get; }
@@ -61,6 +66,11 @@ namespace Game.UI
             if (status == null || coordinator == null) return;
             titleLabel.text = Title; descriptionLabel.text = Description;
             bool failed = coordinator.Phase == RunPhase.Faulted;
+            if (SecondaryButton != null)
+            {
+                SecondaryButton.gameObject.SetActive(!failed && ShowSecondary);
+                SecondaryButton.interactable = CanSecondaryAct(coordinator);
+            }
             PrimaryButton.interactable = failed || CanAct(coordinator);
             PrimaryButton.GetComponentInChildren<Text>().text = failed ? "Повторить переход домой" : ButtonLabel;
             status.text = failed
@@ -110,8 +120,24 @@ namespace Game.UI
             image.color = new Color(0.12f, 0.47f, 0.35f);
             PrimaryButton = buttonRect.gameObject.AddComponent<Button>();
             PrimaryButton.targetGraphic = image;
+            PrimaryButton.navigation = new Navigation { mode = Navigation.Mode.None };
             PrimaryButton.onClick.AddListener(OnPrimary);
             Label("Label", buttonRect, font, ButtonLabel, 25, Vector2.zero, buttonRect.sizeDelta);
+            if (SecondaryLabel != null)
+            {
+                var secondary = Rect("SecondaryButton", panel);
+                secondary.anchoredPosition = new Vector2(0, -275); secondary.sizeDelta = new Vector2(600, 65);
+                var secondaryImage = secondary.gameObject.AddComponent<Image>();
+                secondaryImage.color = new Color(.24f, .32f, .46f);
+                SecondaryButton = secondary.gameObject.AddComponent<Button>();
+                SecondaryButton.targetGraphic = secondaryImage;
+                SecondaryButton.navigation = new Navigation { mode = Navigation.Mode.None };
+                Label("Label", secondary, font, SecondaryLabel, 24, Vector2.zero, secondary.sizeDelta);
+                SecondaryButton.onClick.AddListener(() =>
+                {
+                    if (coordinator != null && CanSecondaryAct(coordinator)) ActSecondary(coordinator);
+                });
+            }
         }
 
         private static RectTransform Rect(string name, Transform parent)

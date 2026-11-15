@@ -1,0 +1,10 @@
+.agent/STAGE_2_PLAN.md
+.agent/MELEE_SPEED_COMMIT_PATHS.txt
+Coordination/ROLE_2_STATUS.md
+Game/Assets/_Game/Scripts/AI/SandboxEnemy.cs
+Game/Assets/_Game/Tests/PlayMode/ZombieMeleeTests.cs
+Game/Assets/_Game/Tests/PlayMode/EnemyPerceptionTests.cs
+Game/Assets/_Game/Tests/PlayMode/AutoAimEnemyTests.cs
+Game/Docs/S2_02_HANDOFF.md
+Game/Docs/S2_04_READINESS.md
+Game/Docs/Plans/S2_MELEE_SPEED_PLAN.md
