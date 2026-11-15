@@ -62,6 +62,7 @@ namespace Game.AI
         }
         public enum AttackPhase { Chase, Windup, Swing, Recover }
         public AttackPhase Phase { get; private set; }
+        private const float WindupDuration=.2f, SwingDuration=.06f, RecoveryDuration=.3f;
         private float phaseTime;
         private Vector2 strikeDirection;
         private SpriteRenderer arm;
@@ -138,19 +139,19 @@ namespace Game.AI
                 if (offset.magnitude > 1.1f)
                     body.linearVelocity = offset.normalized * Mathf.Min(speed, Mathf.Max(0,offset.magnitude-1.1f)/Time.fixedDeltaTime);
                 else if ((!sensing || perception.HasLineOfSight) && ClearStrikePath(offset))
-                { strikeDirection = offset.sqrMagnitude > .0001f ? offset.normalized : Vector2.down; Phase = AttackPhase.Windup; phaseTime=.4f; ShowArm(-100); }
+                { strikeDirection = offset.sqrMagnitude > .0001f ? offset.normalized : Vector2.down; Phase = AttackPhase.Windup; phaseTime=WindupDuration; ShowArm(-100); }
                 return;
             }
             phaseTime -= Time.fixedDeltaTime;
             if (Phase == AttackPhase.Windup)
             {
-                ShowArm(Mathf.Lerp(-100,-45,1-Mathf.Clamp01(phaseTime/.4f)));
-                if (phaseTime <= 0) { Strike(); Phase=AttackPhase.Swing; phaseTime=.12f; }
+                ShowArm(Mathf.Lerp(-100,-45,1-Mathf.Clamp01(phaseTime/WindupDuration)));
+                if (phaseTime <= 0) { Strike(); Phase=AttackPhase.Swing; phaseTime=SwingDuration; }
             }
             else if (Phase == AttackPhase.Swing)
             {
-                ShowArm(Mathf.Lerp(-45,65,1-Mathf.Clamp01(phaseTime/.12f)));
-                if (phaseTime <= 0) { Phase=AttackPhase.Recover; phaseTime=.6f; if(arm!=null)arm.enabled=false; }
+                ShowArm(Mathf.Lerp(-45,65,1-Mathf.Clamp01(phaseTime/SwingDuration)));
+                if (phaseTime <= 0) { Phase=AttackPhase.Recover; phaseTime=RecoveryDuration; if(arm!=null)arm.enabled=false; }
             }
             else if (phaseTime <= 0) ResetAttack();
         }

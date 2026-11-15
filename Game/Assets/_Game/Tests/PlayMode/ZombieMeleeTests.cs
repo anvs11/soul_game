@@ -35,7 +35,7 @@ namespace Game.Tests
         [UnityTest] public IEnumerator WindupDoesNotPushAndAcceptedHitMovesOneCell()
         {
             Setup(true);
-            yield return new WaitForSeconds(.25f);
+            yield return new WaitForSeconds(.1f);
             Assert.That(health.Health,Is.EqualTo(500));
             Assert.That(Vector2.Distance(hero.transform.position,origin),Is.LessThan(.02f));
             yield return new WaitForSeconds(.5f);
@@ -44,7 +44,7 @@ namespace Game.Tests
         }
         [UnityTest] public IEnumerator LeavingTheTelegraphedRangeDodgesTheHit()
         {
-            Setup(true); yield return new WaitForSeconds(.15f);
+            Setup(true); yield return new WaitForSeconds(.08f);
             Assert.That(enemy.Phase,Is.EqualTo(SandboxEnemy.AttackPhase.Windup));
             hero.GetComponent<Rigidbody2D>().position=origin+Vector2.up*3;
             Physics2D.SyncTransforms(); yield return new WaitForSeconds(.45f);
@@ -63,6 +63,34 @@ namespace Game.Tests
                 Assert.That(hero.transform.position.x,Is.LessThan(origin.x+.32f));
             }
         }
+        [UnityTest] public IEnumerator FasterAttackMeasuresAllThreePhasesAndPreservesTenDamage()
+        {
+            Setup(true);
+            // Keep the target in range so timing isn't changed by chasing knockback.
+            motor.SetControlsEnabled(false);
+            float deadline=Time.fixedTime+1;
+            while(enemy.Phase==SandboxEnemy.AttackPhase.Chase)
+            {
+                Assert.That(Time.fixedTime,Is.LessThan(deadline));
+                yield return new WaitForFixedUpdate();
+            }
+            var phases=new[]{SandboxEnemy.AttackPhase.Windup,SandboxEnemy.AttackPhase.Swing,SandboxEnemy.AttackPhase.Recover};
+            var durations=new[]{.2f,.06f,.3f};
+            for(int index=0;index<phases.Length;index++)
+            {
+                Assert.That(enemy.Phase,Is.EqualTo(phases[index]));
+                float began=Time.fixedTime;
+                while(enemy.Phase==phases[index])
+                {
+                    Assert.That(Time.fixedTime-began,Is.LessThan(1));
+                    yield return new WaitForFixedUpdate();
+                }
+                Assert.That(Time.fixedTime-began,Is.EqualTo(durations[index]).Within(Time.fixedDeltaTime+.005f),phases[index].ToString());
+            }
+            Assert.That(health.Health,Is.EqualTo(490));
+            Assert.That(enemy.Phase,Is.EqualTo(SandboxEnemy.AttackPhase.Chase));
+        }
+
         [UnityTearDown] public IEnumerator Cleanup()
         {
             if(foe!=null)Object.Destroy(foe);

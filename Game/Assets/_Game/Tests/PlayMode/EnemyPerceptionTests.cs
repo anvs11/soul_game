@@ -99,7 +99,7 @@ namespace Game.Tests
             yield return new WaitForFixedUpdate(); yield return new WaitForFixedUpdate();
             Assert.IsFalse(perception.HasTarget); Assert.That(observer.GetComponent<Rigidbody2D>().linearVelocity, Is.EqualTo(Vector2.zero));
             player.transform.position = origin + Vector2.right; Physics2D.SyncTransforms();
-            yield return new WaitForSeconds(.2f); Assert.IsTrue(perception.HasTarget);
+            yield return new WaitForSeconds(.08f); Assert.IsTrue(perception.HasTarget);
             Assert.That(enemy.Phase, Is.EqualTo(SandboxEnemy.AttackPhase.Windup)); Assert.That(playerHealth.Health, Is.EqualTo(100));
             yield return new WaitForSeconds(.3f); Assert.That(playerHealth.Health, Is.EqualTo(90));
             observer.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(0, 30));
@@ -111,13 +111,13 @@ namespace Game.Tests
             Setup(); player.transform.position = origin + Vector2.right;
             var enemy = BindEnemy(); Physics2D.SyncTransforms();
             int enemyDeaths = 0; enemy.Died += () => enemyDeaths++;
-            yield return new WaitForSeconds(.2f);
+            yield return new WaitForSeconds(.08f);
             Assert.That(enemy.Phase, Is.EqualTo(SandboxEnemy.AttackPhase.Windup));
             player.SetActive(false);
             yield return new WaitForFixedUpdate(); yield return new WaitForFixedUpdate();
             Assert.IsFalse(perception.HasTarget); Assert.That(enemy.Phase, Is.EqualTo(SandboxEnemy.AttackPhase.Chase));
             player.SetActive(true); Physics2D.SyncTransforms();
-            yield return new WaitForSeconds(.2f);
+            yield return new WaitForSeconds(.08f);
             Assert.That(playerHealth.Health, Is.EqualTo(100), "Re-enabled target must get a fresh windup.");
             playerHealth.ApplyDamage(new DamagePacket(0, 1000));
             yield return new WaitForFixedUpdate(); yield return new WaitForFixedUpdate();
