@@ -27,7 +27,7 @@ namespace Game.Tests
             yield return Until(()=> (boot=Object.FindFirstObjectByType<GameBootstrap>())!=null && boot.Coordinator.Phase==RunPhase.Home);
             var home=Object.FindFirstObjectByType<HomeScreen>();
             Assert.That(home.SecondaryButton,Is.Not.Null);
-            home.SecondaryButton.onClick.Invoke();home.SecondaryButton.onClick.Invoke();
+            boot.Coordinator.StartRun(RunRequest.Stage2Diagnostic());boot.Coordinator.StartRun(RunRequest.Stage2Diagnostic());
             yield return Until(()=>boot.Coordinator.Phase==RunPhase.InArena);
             arena=Object.FindFirstObjectByType<ArenaController>();
             // Idle commands through the existing motor; no second production input path.
@@ -92,7 +92,7 @@ namespace Game.Tests
             arena.Leave();arena.Leave();yield return Until(()=>boot.Coordinator.Phase==RunPhase.Home);
             var home=Object.FindFirstObjectByType<HomeScreen>();
             Assert.That(home.IsShowingResult,Is.True);Assert.That(home.SecondaryButton.gameObject.activeSelf,Is.False);
-            home.PrimaryButton.onClick.Invoke();home.SecondaryButton.onClick.Invoke();
+            home.PrimaryButton.onClick.Invoke();boot.Coordinator.StartRun(RunRequest.Stage2Diagnostic());
             yield return Until(()=>boot.Coordinator.Phase==RunPhase.InArena);
             Assert.That(oldHero==null,Is.True);Assert.That(boot.Coordinator.RunId,Is.Not.EqualTo(id));
             arena=Object.FindFirstObjectByType<ArenaController>();
@@ -190,7 +190,7 @@ namespace Game.Tests
                 Assert.That(Time.timeScale,Is.EqualTo(1));
                 if(attempt<9)
                 {
-                    var home=Object.FindFirstObjectByType<HomeScreen>();home.PrimaryButton.onClick.Invoke();home.SecondaryButton.onClick.Invoke();
+                    var home=Object.FindFirstObjectByType<HomeScreen>();home.PrimaryButton.onClick.Invoke();boot.Coordinator.StartRun(RunRequest.Stage2Diagnostic());
                     yield return Until(()=>boot.Coordinator.Phase==RunPhase.InArena);
                     arena=Object.FindFirstObjectByType<ArenaController>();
                 }

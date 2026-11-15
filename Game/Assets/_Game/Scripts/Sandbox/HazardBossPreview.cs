@@ -19,9 +19,10 @@ namespace Game.Sandbox
         {
             hero.GetComponent<AutoAimSelector>().Configure(registry); hero.SetControlsEnabled(true); hud.Bind(hero);
             if (boss != null) boss.Initialize(registry, hero.transform);
-            hud.SetHint("WASD / Space / Q · Esc пауза · F6 тестовый урон 150 боссу или активация бочки");
+            hud.SetHint("WASD / Space / Q · Esc пауза · F6 треть HP боссу или активация бочки");
             hero.PauseRequested += Pause;
         }
+        public static float BossDiagnosticDamage(float maxHealth) => maxHealth / 3f;
         private void Pause() { Time.timeScale = Time.timeScale > 0 ? 0 : 1; }
         private void Update()
         {
@@ -29,7 +30,7 @@ namespace Game.Sandbox
             if (Keyboard.current != null && Keyboard.current.f6Key.wasPressedThisFrame && Time.timeScale > 0)
             {
                 var receiver = boss != null ? boss.GetComponent<DamageReceiver>() : barrel.GetComponent<DamageReceiver>();
-                receiver.ApplyDamage(new DamagePacket(-1, 150));
+                receiver.ApplyDamage(new DamagePacket(-1, boss != null ? BossDiagnosticDamage(receiver.MaxHealth) : 150));
             }
         }
         private void OnDisable() { if (hero != null) hero.PauseRequested -= Pause; if (hud != null) hud.Unbind(); Time.timeScale = 1; }

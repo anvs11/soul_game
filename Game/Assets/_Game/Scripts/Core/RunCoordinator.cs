@@ -1,4 +1,5 @@
 using System;
+using Game.Contracts;
 
 namespace Game.Core
 {
@@ -7,6 +8,9 @@ namespace Game.Core
         private readonly ISceneFlow sceneFlow;
         private RunOutcome? pendingOutcome;
         private bool disposed;
+        private Func<CombatSnapshot> pendingAdvance;
+        public string ActiveArena { get; private set; }
+        public CombatSnapshot? PlayerTransfer { get; private set; }
 
         public RunPhase Phase { get; private set; } = RunPhase.Booting;
         public string RunId { get; private set; }
@@ -32,7 +36,12 @@ namespace Game.Core
             if (request.ArenaId != ScenePaths.CombatSandbox && request.ArenaId != ScenePaths.Stage2CombatSandbox)
                 throw new ArgumentException("Unknown arena profile.", nameof(request));
 
+            if (request.IsStage2Route && request.ArenaId != ScenePaths.Stage2CombatSandbox)
+                throw new ArgumentException("Stage 2 route must start in its ordinary arena.", nameof(request));
             CurrentRequest = request;
+            ActiveArena = request.ArenaId;
+            PlayerTransfer = null;
+            pendingAdvance = null;
             RunId = Guid.NewGuid().ToString("N");
             LastOutcome = null;
             pendingOutcome = null;
@@ -48,19 +57,47 @@ namespace Game.Core
                 pendingOutcome = outcome;
         }
 
+        public void CompleteArena(string arena, Func<CombatSnapshot> readState)
+        {
+            if (disposed || Phase != RunPhase.InArena || !CurrentRequest.IsStage2Route ||
+                arena != ScenePaths.Stage2CombatSandbox || ActiveArena != arena || readState == null) return;
+            if (pendingAdvance == null) pendingAdvance = readState;
+        }
+
         // The Unity owner calls this once in LateUpdate, after gameplay requests.
         public void ResolvePendingFinish()
         {
-            if (disposed || Phase != RunPhase.InArena || !pendingOutcome.HasValue) return;
-            LastOutcome = pendingOutcome;
-            pendingOutcome = null;
-            Load(ScenePaths.Home, RunPhase.ReturningHome, RunPhase.Home);
+            if (disposed || Phase != RunPhase.InArena) return;
+            if (pendingOutcome.HasValue)
+            {
+                LastOutcome = pendingOutcome;
+                pendingOutcome = null;
+                pendingAdvance = null;
+                PlayerTransfer = null;
+                Load(ScenePaths.Home, RunPhase.ReturningHome, RunPhase.Home);
+            }
+            else if (pendingAdvance != null)
+            {
+                var state = pendingAdvance();
+                pendingAdvance = null;
+                if (state.IsDead || state.Health <= 0)
+                {
+                    FinishRun(RunOutcome.Defeat);
+                    ResolvePendingFinish();
+                    return;
+                }
+                PlayerTransfer = state;
+                ActiveArena = ScenePaths.Stage2BossSandbox;
+                Load(ActiveArena, RunPhase.LoadingArena, RunPhase.InArena);
+            }
         }
 
         public void RetryHome()
         {
             if (disposed || Phase != RunPhase.Faulted) return;
             pendingOutcome = null;
+            pendingAdvance = null;
+            PlayerTransfer = null;
             Load(ScenePaths.Home, RunPhase.ReturningHome, RunPhase.Home);
         }
 
@@ -105,6 +142,8 @@ namespace Game.Core
         public void Dispose()
         {
             disposed = true;
+            pendingAdvance = null;
+            PlayerTransfer = null;
             pendingOutcome = null;
             Changed = null;
         }

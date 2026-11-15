@@ -29,6 +29,14 @@ namespace Game.Combat
             Magazine = definition.MagazineCapacity; ReserveAmmo = definition.InitialReserve;
         }
         private static bool Positive(float value) => value > 0 && !float.IsInfinity(value) && !float.IsNaN(value);
+        public void RestoreForEncounter(int magazine, int reserve, float stamina, bool melee)
+        {
+            if (magazine < 0 || magazine > MagazineCapacity || reserve < 0 ||
+                float.IsNaN(stamina) || float.IsInfinity(stamina) || stamina < 0 || stamina > MaxStamina)
+                throw new ArgumentOutOfRangeException(nameof(magazine));
+            Magazine = magazine; ReserveAmmo = reserve; Stamina = stamina; Selected = !melee;
+            cooldown = reloadRemaining = meleeCooldown = knifeRecoveryDelay = 0;
+        }
         public void SetSelected(bool selected) { Selected = selected; if (!selected) reloadRemaining = 0; }
         public void CancelReload() => reloadRemaining = 0;
         public void Advance(float deltaTime, bool attackHeld = false)

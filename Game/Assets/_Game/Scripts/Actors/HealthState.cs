@@ -15,6 +15,13 @@ namespace Game.Actors
             if (float.IsNaN(maxArmor) || float.IsInfinity(maxArmor) || maxArmor < 0) throw new ArgumentOutOfRangeException(nameof(maxArmor));
             MaxHealth = CurrentHealth = maxHealth; MaxArmor = CurrentArmor = maxArmor;
         }
+        public void RestoreForEncounter(float health, float armor)
+        {
+            if (float.IsNaN(health) || float.IsInfinity(health) || health <= 0 || health > MaxHealth ||
+                float.IsNaN(armor) || float.IsInfinity(armor) || armor < 0 || armor > MaxArmor)
+                throw new ArgumentOutOfRangeException(nameof(health));
+            CurrentHealth = health; CurrentArmor = armor;
+        }
         public DamageResult ApplyDamage(in DamagePacket packet)
         {
             if (IsDead || packet.Amount <= 0) return default;
