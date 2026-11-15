@@ -10,8 +10,8 @@ namespace Game.AI
         public float PreferredRange=6;
         public float MinimumRange=4;
         public float FireRange=8;
-        public float Windup=.5f;
-        public float Interval=1.2f;
+        public float Windup=.35f;
+        public float Interval=.8f;
         public float ProjectileSpeed=8;
         public float ProjectileLifetime=3;
         public float Damage=10;

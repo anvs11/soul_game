@@ -34,6 +34,7 @@ namespace Game.Tests
         {
             float deadline=Time.realtimeSinceStartup+4;
             while(enemy.Phase!=phase){Assert.That(Time.realtimeSinceStartup,Is.LessThan(deadline));yield return new WaitForFixedUpdate();}
+            if (phase == JumpingEnemy.AttackPhase.Recovery) { yield return new WaitForFixedUpdate(); yield return new WaitForFixedUpdate(); }
         }
         [UnityTest] public IEnumerator OneDashHitsMultipleCollidersOnlyOnceAndRecovers()
         {
@@ -87,9 +88,9 @@ namespace Game.Tests
             yield return new WaitForFixedUpdate();Assert.That(enemy.Phase,Is.EqualTo(JumpingEnemy.AttackPhase.Idle));
             hero.SetActive(true);yield return Until(JumpingEnemy.AttackPhase.Windup);Assert.That(health.Health,Is.EqualTo(999));
         }
-        [UnityTest] public IEnumerator ProtectedFirstContactDoesNotRetryAfterInvulnerabilityExpires()
+        [UnityTest] public IEnumerator ProtectedLandingDoesNotBypassInvulnerability()
         {
-            Setup(.7f);hero.transform.position=origin+Vector2.right;Physics2D.SyncTransforms();health.ApplyDamage(new DamagePacket(-1,1));
+            Setup(2f);hero.transform.position=origin+Vector2.right;Physics2D.SyncTransforms();health.ApplyDamage(new DamagePacket(-1,1));
             yield return Until(JumpingEnemy.AttackPhase.Recovery);Assert.That(health.Health,Is.EqualTo(999));
         }
         [UnityTest] public IEnumerator DeathDuringDashStopsMotionAndEmitsOnce()
@@ -110,6 +111,26 @@ namespace Game.Tests
                 yield return Cleanup();
             }
         }
+        [UnityTest] public IEnumerator JumpPassesStationaryHeroWithoutDamageOrPushUntilLanding()
+        {
+            Setup();hero.SetActive(false);
+            var body=hero.AddComponent<Rigidbody2D>();body.gravityScale=0;body.freezeRotation=true;
+            var input=hero.AddComponent<MovementTestInput>();
+            var motor=hero.AddComponent<ActorMotor2D>();motor.Configure(input);hero.SetActive(true);
+            enemy.Initialize(registry,hero.transform);
+            yield return Until(JumpingEnemy.AttackPhase.Dash);
+            var position=hero.transform.position;
+            while(enemy.Phase==JumpingEnemy.AttackPhase.Dash)
+            {
+                Assert.That(health.Health,Is.EqualTo(1000));Assert.That(motor.IsKnockedBack,Is.False);
+                Assert.That(Vector2.Distance(position,hero.transform.position),Is.LessThan(.03f));
+                yield return new WaitForFixedUpdate();
+            }
+            Assert.That(foe.transform.position.x,Is.GreaterThan(position.x));
+            yield return new WaitForFixedUpdate();yield return new WaitForFixedUpdate();
+            Assert.That(health.Health,Is.EqualTo(990));Assert.That(motor.IsKnockedBack,Is.True);
+        }
+
         [UnityTearDown] public IEnumerator Cleanup()
         {
             Time.timeScale=1;if(foe!=null)Object.Destroy(foe);if(hero!=null)Object.Destroy(hero);if(root!=null)Object.Destroy(root);if(wall!=null)Object.Destroy(wall);if(definition!=null)Object.Destroy(definition);yield return null;

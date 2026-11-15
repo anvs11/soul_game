@@ -13,6 +13,7 @@ namespace Game.UI
         private RectTransform safeRoot;
         private Rect lastSafeArea;
         private Text state;
+        private Text encounter;
         private string hint;
         public void SetHint(string value) { hint=value; if (IsBound) Render(source.ReadSnapshot()); }
         public bool IsBound => source != null;
@@ -32,6 +33,7 @@ namespace Game.UI
         {
             if (source != null) source.Changed -= Render;
             source = null;
+            if (encounter != null) encounter.text = "";
             if (state != null) state.text = "HUD: герой не подключён";
             for (int i = 0; i < 3; i++)
             {
@@ -40,6 +42,20 @@ namespace Game.UI
             }
         }
 
+        public void SetEncounter(string text)
+        {
+            EnsureView();
+            if (encounter == null)
+            {
+                encounter = Label("Encounter", safeRoot);
+                var rect = encounter.rectTransform;
+                rect.anchorMin = rect.anchorMax = new Vector2(0, 1);
+                rect.pivot = new Vector2(0, 1);
+                rect.anchoredPosition = new Vector2(20, -140);
+                rect.sizeDelta = new Vector2(340, 55);
+            }
+            encounter.text = text;
+        }
         private void OnDisable() => Unbind();
         private void OnDestroy() => Unbind();
         private void Awake() { EnsureView(); Unbind(); }

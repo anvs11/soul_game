@@ -125,21 +125,6 @@ namespace Game.AI
             foreach(var hit in hits)
                 if(hit.collider!=null && hit.collider.GetComponentInParent<ActorIdentity>()==null)
                 {distance=Mathf.Min(distance,Mathf.Max(0,hit.distance-.02f));blocked=true;}
-            if(!consumed)
-            {
-                filter.SetLayerMask(damageMask);
-                Physics2D.CircleCast(body.position,definition.HitRadius,DashDirection,filter,hits,distance);
-                foreach(var hit in hits)
-                {
-                    if(hit.collider==null || hit.collider.GetComponentInParent<DamageReceiver>()!=targetHealth)continue;
-                    var targetIdentity=hit.collider.GetComponentInParent<ActorIdentity>();
-                    if(targetIdentity!=null && targetIdentity.Faction==identity.Faction)continue;
-                    consumed=true;
-                    var result=targetHealth.ApplyDamage(new DamagePacket(ActorId,definition.Damage));
-                    if(result.Applied&&!result.Killed)player.GetComponent<ActorMotor2D>()?.BeginKnockback(DashDirection,definition.Knockback);
-                    break;
-                }
-            }
             body.linearVelocity=DashDirection*(distance/Time.fixedDeltaTime);
             timer-=Time.fixedDeltaTime;
             if(timer<=0||blocked){Phase=AttackPhase.Recovery;timer=definition.Recovery;landingPending=true;}

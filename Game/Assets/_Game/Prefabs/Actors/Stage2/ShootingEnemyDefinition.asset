@@ -17,8 +17,8 @@ MonoBehaviour:
   PreferredRange: 6
   MinimumRange: 4
   FireRange: 8
-  Windup: 0.5
-  Interval: 1.2
+  Windup: 0.35
+  Interval: 0.8
   ProjectileSpeed: 8
   ProjectileLifetime: 3
   Damage: 10
