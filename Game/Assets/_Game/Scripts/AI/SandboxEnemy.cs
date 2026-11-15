@@ -7,7 +7,7 @@ namespace Game.AI
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Rigidbody2D), typeof(ActorIdentity), typeof(DamageReceiver))]
-    public sealed class SandboxEnemy : MonoBehaviour, IDefeatable
+    public sealed class SandboxEnemy : MonoBehaviour, IEnemyTarget
     {
         [SerializeField] private TargetRegistry registry;
         [SerializeField] private Transform player;
