@@ -58,6 +58,8 @@ namespace Game.Sandbox
             run.Changed += OnPhaseChanged;
             hud.SetHint("WASD: движение · Space: атака · Q: оружие · E: выход после зачистки");
             hud.Bind(player);
+            if (run.CurrentRequest.IsStage2Diagnostic)
+                hud.SetHint("Stage 2 · диагностическая арена без босса · WASD / Space / Q / E");
             OnPhaseChanged();
         }
         private void OnEnemyDied()
