@@ -9,7 +9,7 @@ namespace Game.Actors
     public sealed class ActorMotor2D : MonoBehaviour
     {
         [SerializeField] private MonoBehaviour inputSource;
-        [SerializeField, Min(0f)] private float speed = 5f;
+        [SerializeField, Min(0f)] private float speed = 5.5f;
         private Rigidbody2D body;
         private IPlayerInputSource source;
         private bool controlsEnabled = true;

@@ -8,10 +8,13 @@ namespace Game.Combat
         public float Amount { get; }
         public DamageType DamageType { get; }
         public long AttackId { get; }
-        public DamagePacket(int sourceActorId, float amount, DamageType damageType = DamageType.Normal, long attackId = 0)
+        public float? ProtectionSecondsOverride { get; }
+        public DamagePacket(int sourceActorId, float amount, DamageType damageType = DamageType.Normal, long attackId = 0, float? protectionSecondsOverride = null)
         {
             if (float.IsNaN(amount) || float.IsInfinity(amount) || amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
             if (damageType != DamageType.Normal) throw new ArgumentOutOfRangeException(nameof(damageType));
+            if (protectionSecondsOverride.HasValue && (float.IsNaN(protectionSecondsOverride.Value) || float.IsInfinity(protectionSecondsOverride.Value) || protectionSecondsOverride.Value < 0)) throw new ArgumentOutOfRangeException(nameof(protectionSecondsOverride));
+            ProtectionSecondsOverride = protectionSecondsOverride;
             SourceActorId = sourceActorId; Amount = amount; DamageType = damageType; AttackId = attackId;
         }
     }

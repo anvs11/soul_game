@@ -120,7 +120,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   inputSource: {fileID: 1005}
-  speed: 5
+  speed: 5.5
 --- !u!114 &1007
 MonoBehaviour:
   m_ObjectHideFlags: 0

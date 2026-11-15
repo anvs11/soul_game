@@ -89,11 +89,11 @@ namespace Game.Tests
                 input.Command = new PlayerCommand(Vector2.right * .5f);
                 yield return null;
                 yield return new WaitForFixedUpdate();
-                Assert.That(body.linearVelocity.magnitude, Is.EqualTo(2.5f).Within(.02f));
+                Assert.That(body.linearVelocity.magnitude, Is.EqualTo(2.75f).Within(.02f));
                 input.Command = new PlayerCommand(Vector2.one);
                 yield return null;
                 yield return new WaitForFixedUpdate();
-                Assert.That(body.linearVelocity.magnitude, Is.EqualTo(5f).Within(.02f));
+                Assert.That(body.linearVelocity.magnitude, Is.EqualTo(5.5f).Within(.02f));
                 motor.SetControlsEnabled(false);
                 input.Command = new PlayerCommand(Vector2.right, attackHeld: true, pausePressed: true);
                 yield return null;

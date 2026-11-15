@@ -21,11 +21,11 @@ namespace Game.Tests
             var go=Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(Folder+name+".prefab"));
             go.transform.SetParent(root.transform);go.transform.position=origin+offset;return go;
         }
-        private GameObject Target(Vector2 offset,float hp=1000,float armor=0)
+        private GameObject Target(Vector2 offset,float hp=1000,float armor=0,float protection=0)
         {
             var go=new GameObject("Blast target");go.SetActive(false);go.transform.SetParent(root.transform);go.transform.position=origin+offset;
             go.AddComponent<ActorIdentity>();go.AddComponent<CircleCollider2D>().radius=.3f;go.AddComponent<BoxCollider2D>().size=Vector2.one*.5f;
-            go.AddComponent<DamageReceiver>().Configure(hp,armor,0);go.SetActive(true);return go;
+            go.AddComponent<DamageReceiver>().Configure(hp,armor,protection);go.SetActive(true);return go;
         }
         [UnitySetUp] public IEnumerator Setup()
         {root=new GameObject("Hazard test root");registry=root.AddComponent<TargetRegistry>();Time.timeScale=1;yield return null;}
@@ -55,8 +55,8 @@ namespace Game.Tests
             hero.GetComponent<ActorMotor2D>().Stun(2);yield return null;hero.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1,1000));yield return null;
             Assert.That(hero.GetComponent<ActorMotor2D>().StunRemaining,Is.Zero);Assert.That(hero.GetComponent<StunStars>().Visible,Is.False);
         }
-        private void Boss()
-        {hero=Target(Vector2.right*12,10000);boss=Spawn("PoliceBoss",Vector2.zero).GetComponent<PoliceBoss>();boss.Initialize(registry,hero.transform);Physics2D.SyncTransforms();}
+        private void Boss(float protection=0)
+        {hero=Target(Vector2.right*12,10000,0,protection);boss=Spawn("PoliceBoss",Vector2.zero).GetComponent<PoliceBoss>();boss.Initialize(registry,hero.transform);Physics2D.SyncTransforms();}
         [UnityTest] public IEnumerator ExactThresholdsAndSkippedThresholdsAreMonotonic()
         {
             Boss();var hp=boss.GetComponent<DamageReceiver>();hp.ApplyDamage(new DamagePacket(-1,200));Assert.That(boss.Level,Is.EqualTo(2));hp.ApplyDamage(new DamagePacket(-1,200));Assert.That(boss.Level,Is.EqualTo(3));Assert.That(boss.PhaseTransitions,Is.EqualTo(2));
@@ -119,6 +119,62 @@ namespace Game.Tests
             var shot=new ProjectileSpawnRequest(origin+Vector2.left*5,Vector2.right,100,1,.12f,~0,-1,CombatFaction.Player,new DamagePacket(-1,10));
             Assert.That(pool.TrySpawn(in shot),Is.True);yield return new WaitForSeconds(.2f);
             Assert.That(barrel.ExplosionCount,Is.EqualTo(1));Assert.That(inside.GetComponent<DamageReceiver>().Health,Is.EqualTo(950));Assert.That(outside.GetComponent<DamageReceiver>().Health,Is.EqualTo(1000));Assert.That(pool.ActiveCount,Is.Zero);
+        }
+        private IEnumerator UntilBossPhase(PoliceBoss.AttackPhase phase)
+        {
+            float deadline=Time.time+10;
+            while(boss.Phase!=phase){Assert.That(Time.time,Is.LessThan(deadline));yield return null;}
+        }
+        private void KillSummons()
+        {
+            foreach(var minion in Object.FindObjectsByType<ShieldMinion>(FindObjectsSortMode.None))
+                minion.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1,100));
+        }
+        [UnityTest] public IEnumerator SecondStageSummonsOnceAndDoesNotReplaceKilledMinions()
+        {
+            Boss();boss.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1,200));
+            yield return UntilBossPhase(PoliceBoss.AttackPhase.Roll);
+            Assert.That(boss.SecondStageSummons,Is.EqualTo(2));KillSummons();yield return null;
+            yield return UntilBossPhase(PoliceBoss.AttackPhase.Reload);
+            yield return UntilBossPhase(PoliceBoss.AttackPhase.Roll);
+            Assert.That(boss.SecondStageSummons,Is.EqualTo(2));Assert.That(boss.LivingMinions,Is.Zero);
+        }
+        [UnityTest] public IEnumerator ThirdStageSummonsAfterRollOnlyOnceAndKeepsEarlierSurvivors()
+        {
+            Boss();boss.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1,200));
+            yield return UntilBossPhase(PoliceBoss.AttackPhase.Roll);Assert.That(boss.LivingMinions,Is.EqualTo(2));
+            boss.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1,250));
+            yield return UntilBossPhase(PoliceBoss.AttackPhase.Reload);
+            yield return UntilBossPhase(PoliceBoss.AttackPhase.Roll);
+            Assert.That(boss.ThirdStageSummons,Is.Zero);Assert.That(boss.LivingMinions,Is.EqualTo(2));
+            yield return UntilBossPhase(PoliceBoss.AttackPhase.Spin);
+            Assert.That(boss.ThirdStageSummons,Is.EqualTo(4));Assert.That(boss.LivingMinions,Is.EqualTo(6));
+            KillSummons();yield return null;boss.Initialize(registry,hero.transform);
+            yield return UntilBossPhase(PoliceBoss.AttackPhase.Spin);
+            Assert.That(boss.ThirdStageSummons,Is.EqualTo(4));Assert.That(boss.LivingMinions,Is.Zero);
+        }
+        [UnityTest] public IEnumerator RealBossBurstDamagesRepeatedlyDespiteDefaultTargetProtection()
+        {
+            Boss(.5f);yield return UntilBossPhase(PoliceBoss.AttackPhase.Reload);yield return new WaitForSeconds(1);
+            float lost=10000-hero.GetComponent<DamageReceiver>().Health;
+            Assert.That(lost,Is.GreaterThanOrEqualTo(90));Assert.That(lost%15,Is.EqualTo(0));
+        }
+        [UnityTest] public IEnumerator DefaultProtectionStaysHalfSecondWhileBossPacketUsesShortWindow()
+        {
+            var normal=Target(Vector2.up*30,1000,0,.5f).GetComponent<DamageReceiver>();
+            var fast=Target(Vector2.down*30,1000,0,.5f).GetComponent<DamageReceiver>();
+            var ordinary=new DamagePacket(-1,10);var bossHit=new DamagePacket(-1,15,protectionSecondsOverride:.1f);
+            normal.ApplyDamage(ordinary);fast.ApplyDamage(bossHit);yield return new WaitForSeconds(.16f);
+            normal.ApplyDamage(ordinary);fast.ApplyDamage(bossHit);
+            Assert.That(normal.Health,Is.EqualTo(990));Assert.That(fast.Health,Is.EqualTo(970));
+        }
+        [UnityTest] public IEnumerator ThirdStageFindsFourSafePositionsAfterRollingIntoCorner()
+        {
+            Boss();boss.transform.position=origin+new Vector2(15,7);hero.transform.position=origin+new Vector2(17,9);
+            var north=new GameObject("Corner north");north.transform.SetParent(root.transform);north.layer=LayerMask.NameToLayer("World");north.transform.position=origin+new Vector2(0,10);north.AddComponent<BoxCollider2D>().size=new Vector2(36,.5f);
+            var east=new GameObject("Corner east");east.transform.SetParent(root.transform);east.layer=LayerMask.NameToLayer("World");east.transform.position=origin+new Vector2(18,0);east.AddComponent<BoxCollider2D>().size=new Vector2(.5f,20);
+            boss.Initialize(registry,hero.transform);boss.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1,450));Physics2D.SyncTransforms();
+            yield return UntilBossPhase(PoliceBoss.AttackPhase.Spin);Assert.That(boss.ThirdStageSummons,Is.EqualTo(4));Assert.That(boss.LivingMinions,Is.EqualTo(4));
         }
         [UnityTearDown] public IEnumerator Cleanup()
         {Time.timeScale=1;foreach(var minion in Object.FindObjectsByType<ShieldMinion>(FindObjectsSortMode.None))Object.Destroy(minion.gameObject);Object.Destroy(root);yield return null;}

@@ -20,6 +20,9 @@ namespace Game.AI
         private Vector2 rollDirection;
         private float timer, shotTimer;
         private int rounds, attackLevel;
+        private bool summonedSecondStage, summonedThirdStage;
+        public int SecondStageSummons { get; private set; }
+        public int ThirdStageSummons { get; private set; }
         private bool hitDuringRoll, deathSent, started;
         private readonly List<ShieldMinion> minions = new List<ShieldMinion>();
         private readonly List<RaycastHit2D> hits = new List<RaycastHit2D>();
@@ -101,7 +104,12 @@ namespace Game.AI
             if (timer > 0) return;
             if (Phase == AttackPhase.Reload) { BeginWindup(); return; }
             ShowWarning(false);
-            attackLevel = Level; SpawnMinions(attackLevel == 1 ? 0 : attackLevel == 2 ? 2 : 4);
+            attackLevel = Level;
+            if (attackLevel == 2 && !summonedSecondStage)
+            {
+                summonedSecondStage = true;
+                SecondStageSummons = SpawnMinions(2);
+            }
             Phase = AttackPhase.Roll; timer = definition.RollDuration;
             if (visual != null) visual.GetComponent<SpriteRenderer>().color = new Color(.25f, .45f, .7f);
         }
@@ -132,6 +140,11 @@ namespace Game.AI
             timer -= Time.fixedDeltaTime;
             if (timer > 0 && !blocked) return;
             if (visual != null) visual.localRotation = Quaternion.identity;
+            if (attackLevel == 3 && !summonedThirdStage)
+            {
+                summonedThirdStage = true;
+                ThirdStageSummons = SpawnMinions(4);
+            }
             if (attackLevel == 3) { Phase = AttackPhase.Spin; timer = definition.SpinDuration; shotTimer = 0; SpinDegrees = 0; }
             else { Phase = AttackPhase.Burst; rounds = definition.MagazinePerGun; shotTimer = 0; }
         }
@@ -144,25 +157,29 @@ namespace Game.AI
                 Vector2 muzzle = body.position + perpendicular * (gun == 0 ? -1.2f : 1.2f);
                 Vector2 shotDirection = Phase == AttackPhase.Spin ? direction : ((Vector2)player.position - muzzle).normalized;
                 var request = new ProjectileSpawnRequest(muzzle, shotDirection,
-                    definition.ShotSpeed, definition.ShotLifetime, .12f, ~0, ActorId, CombatFaction.Enemy, new DamagePacket(ActorId, definition.ShotDamage));
+                    definition.ShotSpeed, definition.ShotLifetime, .12f, ~0, ActorId, CombatFaction.Enemy, new DamagePacket(ActorId, definition.ShotDamage, protectionSecondsOverride: .1f));
                 if (!pool.TrySpawn(in request)) return false;
                 ShotsFired++;
             }
             return true;
         }
         private void Reload() { Phase = AttackPhase.Reload; timer = definition.Reload; if (visual != null) visual.localRotation = Quaternion.identity; }
-        private void SpawnMinions(int count)
+        private int SpawnMinions(int count)
         {
             int available = definition.SummonLimit - LivingMinions;
-            for (int index = 0; index < Mathf.Min(count, available); index++)
+            int spawned = 0;
+            for (int candidate = 0; candidate < 24 && spawned < Mathf.Min(count, available); candidate++)
             {
-                float angle = index * Mathf.PI / 2 + Mathf.PI / 4;
-                Vector2 position = body.position + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * 3;
+                float angle = (45 + (candidate % 4) * 90 + ((candidate / 4) % 3) * 30) * Mathf.Deg2Rad;
+                float radius = candidate < 12 ? 3 : 4.5f;
+                Vector2 position = body.position + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
                 if (Physics2D.OverlapCircle(position, .45f, worldMask) != null || Vector2.Distance(position, player.position) < 1) continue;
+                if (minions.Exists(minion => minion != null && Vector2.Distance(minion.transform.position, position) < 1)) continue;
                 var instance = Instantiate(minionPrefab, position, Quaternion.identity);
                 UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(instance, gameObject.scene);
-                var minion = instance.GetComponent<ShieldMinion>(); minion.Initialize(registry, player); instance.SetActive(true); minions.Add(minion);
+                var minion = instance.GetComponent<ShieldMinion>(); minion.Initialize(registry, player); instance.SetActive(true); minions.Add(minion); spawned++;
             }
+            return spawned;
         }
         private void OnDamage(DamageResult result)
         {

@@ -1,0 +1,15 @@
+.agent/BOSS_CORRECTIONS_COMMIT_PATHS.txt
+Coordination/ROLE_1_STATUS.md
+Game/Docs/Plans/S2_06_BOSS_CORRECTIONS_PLAN.md
+Game/Docs/S2_06_HANDOFF.md
+Game/Assets/_Game/Scripts/Combat/DamagePacket.cs
+Game/Assets/_Game/Scripts/Actors/DamageReceiver.cs
+Game/Assets/_Game/Scripts/Actors/ActorMotor2D.cs
+Game/Assets/_Game/Scripts/AI/PoliceBoss.cs
+Game/Assets/_Game/Scripts/AI/PoliceBossDefinition.cs
+Game/Assets/_Game/Scripts/Editor/BossCorrections.cs
+Game/Assets/_Game/Scripts/Editor/BossCorrections.cs.meta
+Game/Assets/_Game/Prefabs/Actors/Player.prefab
+Game/Assets/_Game/Prefabs/Actors/Stage2/PoliceBossDefinition.asset
+Game/Assets/_Game/Tests/PlayMode/InputMovementTests.cs
+Game/Assets/_Game/Tests/PlayMode/HazardBossTests.cs

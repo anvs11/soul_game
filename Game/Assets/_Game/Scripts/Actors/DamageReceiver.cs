@@ -33,7 +33,7 @@ namespace Game.Actors
             if (!isActiveAndEnabled || Time.timeAsDouble < protectedUntil) return default;
             var result = State.ApplyDamage(in packet);
             if (!result.Applied) return result;
-            protectedUntil = Time.timeAsDouble + protectionSeconds;
+            protectedUntil = Time.timeAsDouble + (packet.ProtectionSecondsOverride ?? protectionSeconds);
             DamageApplied?.Invoke(result);
             return result;
         }
