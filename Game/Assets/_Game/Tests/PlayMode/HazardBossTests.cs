@@ -57,6 +57,37 @@ namespace Game.Tests
         }
         private void Boss(float protection=0)
         {hero=Target(Vector2.right*12,10000,0,protection);boss=Spawn("PoliceBoss",Vector2.zero).GetComponent<PoliceBoss>();boss.Initialize(registry,hero.transform);Physics2D.SyncTransforms();}
+        [UnityTest] public IEnumerator BossCleanupPreservesExternalPoolDisable()
+        {
+            Boss(); var projectiles=boss.GetComponent<ProjectilePool>();
+            projectiles.enabled=false;
+            boss.Initialize(registry,hero.transform);
+            Assert.IsFalse(projectiles.enabled,"Initialize must not enable an externally disabled pool.");
+            boss.enabled=false;
+            Assert.IsFalse(projectiles.enabled,"Disable cleanup must only return projectiles.");
+            Assert.That(projectiles.ActiveCount,Is.Zero);
+            boss.enabled=true;
+            yield return new WaitForFixedUpdate();
+            Assert.IsFalse(projectiles.enabled);
+        }
+        [UnityTest] public IEnumerator LethalDamageWhileBossAiDisabledIsFinalizedOnceOnEnable()
+        {
+            Boss(); boss.enabled=false;
+            boss.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1,1000));
+            int deaths=0; boss.Died+=()=>deaths++;
+            boss.enabled=true;
+            Assert.That(deaths,Is.EqualTo(1)); Assert.That(registry.Count,Is.Zero);
+            Assert.That(boss.Phase,Is.EqualTo(PoliceBoss.AttackPhase.Dead));
+            Assert.IsFalse(boss.GetComponent<Rigidbody2D>().simulated);
+            foreach(var collider in boss.GetComponentsInChildren<Collider2D>(true)) Assert.IsFalse(collider.enabled);
+            Assert.IsFalse(boss.transform.Find("Police body").gameObject.activeSelf);
+            boss.Initialize(registry,hero.transform);
+            boss.enabled=false; boss.enabled=true;
+            Assert.That(deaths,Is.EqualTo(1)); Assert.That(boss.Phase,Is.EqualTo(PoliceBoss.AttackPhase.Dead));
+            foreach(var renderer in boss.GetComponentsInChildren<SpriteRenderer>(true))
+                Assert.IsFalse(renderer.enabled && renderer.gameObject.activeInHierarchy,"A dead boss cannot show a warning or body.");
+            yield return new WaitForFixedUpdate(); Assert.That(boss.ShotsFired,Is.Zero);
+        }
         [UnityTest] public IEnumerator ExactThresholdsAndSkippedThresholdsAreMonotonic()
         {
             Boss();var hp=boss.GetComponent<DamageReceiver>();hp.ApplyDamage(new DamagePacket(-1,200));Assert.That(boss.Level,Is.EqualTo(2));hp.ApplyDamage(new DamagePacket(-1,200));Assert.That(boss.Level,Is.EqualTo(3));Assert.That(boss.PhaseTransitions,Is.EqualTo(2));

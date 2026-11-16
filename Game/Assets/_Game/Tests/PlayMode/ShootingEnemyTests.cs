@@ -31,6 +31,15 @@ namespace Game.Tests
             float deadline=Time.time+3;
             while(enemy.ShotsFired==0){Assert.That(Time.time,Is.LessThan(deadline));yield return null;}
         }
+        [UnityTest] public IEnumerator ShooterCleanupPreservesExternalPoolDisableWithMissingTarget()
+        {
+            pool.enabled=false;
+            enemy.Initialize(root.GetComponent<TargetRegistry>(),null);
+            Assert.IsFalse(pool.enabled,"Initialize must preserve the caller's pool state.");
+            yield return new WaitForFixedUpdate(); yield return new WaitForFixedUpdate();
+            Assert.IsFalse(pool.enabled,"Missing-target cleanup must not reopen the pool.");
+            enemy.enabled=false; Assert.IsFalse(pool.enabled); Assert.That(pool.ActiveCount,Is.Zero);
+        }
         [UnityTest] public IEnumerator RealProjectileDealsTenAndDeathClearsPool()
         {
             yield return WaitForShot();Assert.That(pool.ActiveCount,Is.EqualTo(1));

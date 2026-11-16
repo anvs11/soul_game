@@ -52,7 +52,7 @@ namespace Game.AI
         }
         private void Register(){if(registry!=null&&isActiveAndEnabled&&!IsDead)registry.Register(this);}
         private void Detach(){if(registry!=null){registry.Reactivated-=Register;registry.Unregister(this);}}
-        private void ClearShots(){if(pool!=null){pool.enabled=false;pool.enabled=true;}}
+        private void ClearShots(){if(pool!=null)pool.ClearActive();}
         private void ResetAttack(){remaining=0;Phase=IsDead?AttackPhase.Dead:AttackPhase.Waiting;body.linearVelocity=Vector2.zero;perception.ResetMemory();if(skin!=null)skin.color=Color.cyan;}
         private void OnDisable(){Detach();ClearShots();if(health!=null)health.DamageApplied-=OnDamage;if(body!=null)ResetAttack();}
         private void FixedUpdate()
