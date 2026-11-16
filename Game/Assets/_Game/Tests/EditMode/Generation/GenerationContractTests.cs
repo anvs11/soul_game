@@ -43,14 +43,14 @@ namespace Game.Tests
             Assert.IsTrue(success.IsSuccess); Assert.AreSame(layout, success.Layout);
         }
 
-        [Test] public void SixIdExampleGeneratesCandidateButValidatorStillBlocksCombat()
+        [Test] public void SixIdExampleGeneratesValidatedLayout()
         {
             var catalog = new StageCatalog(new[] { Module("street_entry", ModuleKind.Entry), Module("street_a"),
                 Module("street_b"), Module("street_c"), Module("street_rest", ModuleKind.Rest), Module("street_boss", ModuleKind.Boss) });
             Assert.AreEqual(6, catalog.Modules.Count);
             var generated = new RunGenerator().Generate(int.MinValue, catalog, 1, 1);
             Assert.IsTrue(generated.IsSuccess); Assert.IsNotNull(generated.Layout); Assert.IsNotEmpty(generated.Diagnostic);
-            Assert.IsFalse(new LayoutValidator().Validate(generated.Layout, catalog).IsValid);
+            Assert.IsTrue(new LayoutValidator().Validate(generated.Layout, catalog).IsValid);
             var candidate = new RunLayout(1, 1, 1, new[] { new SegmentLayout(1, "street_a") });
             var validation = new LayoutValidator().Validate(candidate, catalog);
             Assert.IsFalse(validation.IsValid); Assert.IsNotEmpty(validation.Reasons);
