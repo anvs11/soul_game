@@ -1,4 +1,7 @@
 using Game.Core;
+using System;
+using Game.Street;
+using UnityEngine.UI;
 using UnityEngine;
 namespace Game.UI
 {
@@ -7,6 +10,9 @@ namespace Game.UI
         public bool IsShowingResult { get; private set; }
         private bool diagnostic, stage2;
         private RunOutcome? outcome;
+        private string streetError = "";
+        public InputField SeedInput { get; private set; }
+        public string StreetError => streetError;
         protected override void OnBound(RunCoordinator value)
         { outcome=value.LastOutcome; IsShowingResult=outcome.HasValue; diagnostic=value.CurrentRequest.IsStage2Diagnostic; stage2=value.CurrentRequest.IsStage2Route; }
         protected override string Title => IsShowingResult
@@ -23,13 +29,54 @@ namespace Game.UI
             else value.StartRun(RunRequest.Sandbox());
         }
         protected override bool ShowStreet => !IsShowingResult && Application.CanStreamedLevelBeLoaded(ScenePaths.Stage3StreetSandbox);
-        protected override void ActStreet(RunCoordinator value) => value.StartRun(RunRequest.StreetRun());
+        protected override void ActStreet(RunCoordinator value)
+        {
+            streetError = "";
+            try
+            {
+                var data = Resources.Load<StreetCatalogAsset>("StreetCatalog");
+                if (data == null) throw new ArgumentException("StreetCatalog resource is missing.");
+                var catalog = StreetGenerationAdapter.BuildCatalog(data.Modules);
+                if (StreetGenerationAdapter.TryGenerate(SeedInput.text, catalog, out var result, out streetError))
+                {
+                    Debug.Log("STREET_GENERATED " + result.Diagnostic);
+                    value.StartGeneratedStreetRun(result, catalog);
+                }
+            }
+            catch (ArgumentException exception) { streetError = "Ошибка каталога: " + exception.Message; }
+            Refresh();
+        }
+        protected override void OnViewCreated(Transform panel, Font font)
+        {
+            if (StreetButton == null) return;
+            var rect = new GameObject("StreetSeed", typeof(RectTransform), typeof(Image), typeof(InputField)).GetComponent<RectTransform>();
+            rect.SetParent(panel, false);
+            rect.anchoredPosition = new Vector2(205, -320);
+            rect.sizeDelta = new Vector2(190, 65);
+            rect.GetComponent<Image>().color = new Color(.12f, .16f, .18f);
+            SeedInput = rect.GetComponent<InputField>();
+            SeedInput.targetGraphic = rect.GetComponent<Image>();
+            var text = new GameObject("Text", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+            text.transform.SetParent(rect, false);
+            var textRect = text.rectTransform;
+            textRect.anchorMin = Vector2.zero; textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = new Vector2(8, 3); textRect.offsetMax = new Vector2(-8, -3);
+            text.font = font; text.fontSize = 19; text.color = Color.white; text.alignment = TextAnchor.MiddleLeft;
+            SeedInput.textComponent = text;
+            var placeholder = Instantiate(text, rect);
+            placeholder.name = "Placeholder"; placeholder.text = "Seed · пусто = новый"; placeholder.fontSize = 15; placeholder.color = Color.gray;
+            SeedInput.placeholder = placeholder;
+        }
+        protected override void OnViewRefreshed()
+        {
+            if (SeedInput != null) SeedInput.gameObject.SetActive(ShowStreet);
+        }
         protected override string SecondaryLabel => Application.CanStreamedLevelBeLoaded(ScenePaths.Stage2CombatSandbox)
             && Application.CanStreamedLevelBeLoaded(ScenePaths.Stage2BossSandbox)
             ? "Stage 2: арена и полицейский" : null;
         protected override bool ShowSecondary => !IsShowingResult;
         protected override bool CanSecondaryAct(RunCoordinator value) => value.Phase==RunPhase.Home && !IsShowingResult;
         protected override void ActSecondary(RunCoordinator value) => value.StartRun(RunRequest.Stage2());
-        protected override string Message(RunCoordinator value) => value.Phase==RunPhase.Home ? "WASD · Space · Q · E" : "Переходим на арену…";
+        protected override string Message(RunCoordinator value) => value.Phase==RunPhase.Home ? (string.IsNullOrEmpty(streetError) ? "WASD · Space · Q · E" : streetError) : "Переходим на арену…";
     }
 }

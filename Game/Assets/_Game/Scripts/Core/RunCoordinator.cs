@@ -1,6 +1,7 @@
 using System;
 using Game.Contracts;
 using Game.Street;
+using Game.Generation;
 
 namespace Game.Core
 {
@@ -13,6 +14,8 @@ namespace Game.Core
         public StreetRoute StreetRoute { get; private set; }
         public int SegmentIndex { get; private set; }
         private StreetRoute requestedStreetRoute;
+        private GenerationResult requestedGeneration;
+        public GenerationResult StreetGeneration { get; private set; }
         public string ActiveArena { get; private set; }
         public CombatSnapshot? PlayerTransfer { get; private set; }
 
@@ -34,6 +37,16 @@ namespace Game.Core
             Load(ScenePaths.Home, RunPhase.ReturningHome, RunPhase.Home);
         }
 
+        public void StartGeneratedStreetRun(GenerationResult result, StageCatalog catalog)
+        {
+            if (disposed || Phase != RunPhase.Home) return;
+            if (result == null || !result.IsSuccess) throw new ArgumentException("A successful generation result is required.");
+            var validation = new LayoutValidator().Validate(result.Layout, catalog);
+            if (!validation.IsValid) throw new ArgumentException(string.Join(" | ", validation.Reasons));
+            requestedGeneration = result;
+            try { StartStreetRun(result.Layout.Seed, StreetGenerationAdapter.ToRoute(result.Layout)); }
+            finally { requestedGeneration = null; }
+        }
         public void StartStreetRun(int seed, StreetRoute route)
         {
             if (disposed || Phase != RunPhase.Home) return;
@@ -50,6 +63,7 @@ namespace Game.Core
             if (request.IsStage2Route && request.ArenaId != ScenePaths.Stage2CombatSandbox)
                 throw new ArgumentException("Stage 2 route must start in its ordinary arena.", nameof(request));
             StreetRoute = request.IsStreetRun ? requestedStreetRoute ?? Game.Street.StreetRoute.Fixed() : null;
+            StreetGeneration = request.IsStreetRun ? requestedGeneration : null;
             SegmentIndex = request.IsStreetRun ? 1 : 0;
             CurrentRequest = request;
             ActiveArena = request.ArenaId;

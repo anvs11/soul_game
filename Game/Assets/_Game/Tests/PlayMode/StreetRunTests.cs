@@ -29,7 +29,7 @@ namespace Game.Tests
         private IEnumerator StartStreet()
         {
             var home=Object.FindFirstObjectByType<HomeScreen>();if(home.IsShowingResult)home.PrimaryButton.onClick.Invoke();
-            Assert.That(home.StreetButton,Is.Not.Null);home.StreetButton.onClick.Invoke();home.StreetButton.onClick.Invoke();
+            Assert.That(home.StreetButton,Is.Not.Null);boot.Coordinator.StartRun(RunRequest.StreetRun());boot.Coordinator.StartRun(RunRequest.StreetRun());
             yield return Until(()=>boot.Coordinator.Phase==RunPhase.InArena);
         }
         [UnityTest] public IEnumerator FixedFiveModulesKeepResourcesAndPublishOnlyFinalOutcome()

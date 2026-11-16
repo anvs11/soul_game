@@ -94,6 +94,23 @@ namespace Game.Sandbox
                 hud.SetHint(IsBossEncounter ? "Полицейский · уклоняйтесь от подготовки и очередей · Esc: пауза" : "Stage 2 · зачистите 3 врагов и идите к выходу E · осторожно: бочка");
             if (run.CurrentRequest.IsStreetRun)
                 hud.SetHint("Улица 1." + run.SegmentIndex + "/5 · " + run.StreetRoute.ModuleIds[run.SegmentIndex - 1] + " · WASD / Space / Q / E");
+            if (run.StreetGeneration != null)
+            {
+                var generated = run.StreetGeneration;
+                string fallback = "";
+                if (generated.UsedFallback)
+                {
+                    string reason = generated.Diagnostic;
+                    int start = reason.IndexOf("last rejection=", System.StringComparison.Ordinal);
+                    if (start >= 0) reason = reason.Substring(start + "last rejection=".Length);
+                    int end = reason.IndexOf("; validated fallback", System.StringComparison.Ordinal);
+                    if (end >= 0) reason = reason.Substring(0, end);
+                    if (reason.Length > 100) reason = reason.Substring(0, 100) + "…";
+                    fallback = " · резерв: " + reason;
+                }
+                hud.SetHint("Улица 1." + run.SegmentIndex + "/5 · " + run.StreetRoute.ModuleIds[run.SegmentIndex - 1] +
+                    " · seed " + generated.Layout.Seed + " · G" + generated.Layout.GeneratorVersion + "/C" + generated.Layout.ContentVersion + fallback);
+            }
             OnPhaseChanged();
         }
         private void OnEnemyDied()
