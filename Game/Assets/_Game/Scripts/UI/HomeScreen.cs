@@ -22,6 +22,8 @@ namespace Game.UI
             if (IsShowingResult) { IsShowingResult=false; Refresh(); }
             else value.StartRun(RunRequest.Sandbox());
         }
+        protected override bool ShowStreet => !IsShowingResult && Application.CanStreamedLevelBeLoaded(ScenePaths.Stage3StreetSandbox);
+        protected override void ActStreet(RunCoordinator value) => value.StartRun(RunRequest.StreetRun());
         protected override string SecondaryLabel => Application.CanStreamedLevelBeLoaded(ScenePaths.Stage2CombatSandbox)
             && Application.CanStreamedLevelBeLoaded(ScenePaths.Stage2BossSandbox)
             ? "Stage 2: арена и полицейский" : null;

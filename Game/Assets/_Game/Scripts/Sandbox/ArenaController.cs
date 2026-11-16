@@ -63,7 +63,7 @@ namespace Game.Sandbox
             }
             run = value;
             player.SetControlsEnabled(false);
-            if (IsBossEncounter && value.PlayerTransfer.HasValue) player.RestoreForEncounter(value.PlayerTransfer.Value);
+            if ((IsBossEncounter || value.CurrentRequest.IsStreetRun) && value.PlayerTransfer.HasValue) player.RestoreForEncounter(value.PlayerTransfer.Value);
             player.GetComponent<AutoAimSelector>().Configure(registry);
             foreach (var enemy in combatants)
             {
@@ -91,6 +91,8 @@ namespace Game.Sandbox
                 hud.SetHint("Stage 2 · диагностическая арена без босса · WASD / Space / Q / E");
             if (run.CurrentRequest.IsStage2Route)
                 hud.SetHint(IsBossEncounter ? "Полицейский · уклоняйтесь от подготовки и очередей · Esc: пауза" : "Stage 2 · зачистите 3 врагов и идите к выходу E · осторожно: бочка");
+            if (run.CurrentRequest.IsStreetRun)
+                hud.SetHint("Улица 1." + run.SegmentIndex + "/5 · " + run.StreetRoute.ModuleIds[run.SegmentIndex - 1] + " · WASD / Space / Q / E");
             OnPhaseChanged();
         }
         private void OnEnemyDied()
@@ -105,7 +107,8 @@ namespace Game.Sandbox
         {
             if (run == null || run.Phase != RunPhase.InArena || IsPaused || player.IsDead || alive.Count != 0 || IsBossEncounter) return;
             if (Vector2.Distance(player.transform.position, exit.position) > 1.5f) return;
-            if (run.CurrentRequest.IsStage2Route) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot);
+            if (run.CurrentRequest.IsStreetRun) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot, run.SegmentIndex);
+            else if (run.CurrentRequest.IsStage2Route) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot);
             else run.FinishRun(RunOutcome.Victory);
         }
         private void OnPhaseChanged()
