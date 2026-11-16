@@ -59,14 +59,15 @@ namespace Game.AI
         {
             Ensure(); IgnoreContacts(); definition.Validate(); started = true; health.DamageApplied += OnDamage;
             if (registry != null) registry.Reactivated += Register;
-            if (IsDead) { Phase = AttackPhase.Dead; return; }
+            if (IsDead) { Phase = AttackPhase.Dead; Die(); return; }
             Register(); BeginWindup();
         }
         private void Register() { if (registry != null && isActiveAndEnabled && !IsDead) registry.Register(this); }
         private void Detach() { if (registry != null) { registry.Reactivated -= Register; registry.Unregister(this); } }
         private void BeginWindup()
         {
-            Phase = IsDead ? AttackPhase.Dead : AttackPhase.Windup; timer = definition.Windup;
+            if (IsDead) { Phase = AttackPhase.Dead; body.linearVelocity = Vector2.zero; ShowWarning(false); return; }
+            Phase = AttackPhase.Windup; timer = definition.Windup;
             body.linearVelocity = Vector2.zero; hitDuringRoll = false; SpinDegrees = 0;
             rollDirection = player != null ? ((Vector2)player.position - body.position).normalized : Vector2.down;
             if (rollDirection.sqrMagnitude < .001f) rollDirection = Vector2.down;
@@ -189,7 +190,7 @@ namespace Game.AI
         }
         private void CleanupOwned()
         {
-            if (pool != null) { pool.enabled = false; pool.enabled = true; }
+            if (pool != null) pool.ClearActive();
             foreach (var minion in minions) if (minion != null) { minion.gameObject.SetActive(false); Destroy(minion.gameObject); }
             minions.Clear();
         }
