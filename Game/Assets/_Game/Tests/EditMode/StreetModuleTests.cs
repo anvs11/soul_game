@@ -40,6 +40,27 @@ namespace Game.Tests
                 Assert.That(run.LastOutcome,Is.EqualTo(RunOutcome.Defeat));
             }
         }
+        private sealed class DeferredFlow : ISceneFlow
+        {
+            private Action<bool,string> callback;
+            public bool TryLoad(string scene,Action<bool,string> done){callback=done;return true;}
+            public void Complete(){var done=callback;callback=null;done(true,null);}
+        }
+        [Test] public void DeadSnapshotAtBoundaryCannotEnterNextSegmentAndLoadingRejectsLateRequests()
+        {
+            var flow=new DeferredFlow();using(var run=new RunCoordinator(flow))
+            {
+                run.Begin();flow.Complete();run.StartRun(RunRequest.StreetRun());flow.Complete();
+                var dead=new CombatSnapshot(0,100,0,30,100,100,0,8,7,true,false,true);
+                run.CompleteArena(ScenePaths.Stage3StreetSandbox,()=>dead,1);run.ResolvePendingFinish();flow.Complete();
+                Assert.That(run.LastOutcome,Is.EqualTo(RunOutcome.Defeat));Assert.That(run.SegmentIndex,Is.EqualTo(1));
+                run.StartRun(RunRequest.StreetRun());flow.Complete();
+                run.CompleteArena(ScenePaths.Stage3StreetSandbox,Snapshot,1);run.ResolvePendingFinish();
+                Assert.That(run.Phase,Is.EqualTo(RunPhase.LoadingArena));
+                run.CompleteArena(ScenePaths.Stage3StreetSandbox,()=>dead,1);run.FinishRun(RunOutcome.Defeat);
+                flow.Complete();Assert.That(run.SegmentIndex,Is.EqualTo(2));Assert.That(run.LastOutcome,Is.Null);
+            }
+        }
         [Test] public void AllModuleCellsMatchPhysicsAndMandatoryPointsAreConnected()
         {
             foreach(string id in new[]{"street_entry","street_a","street_b","street_c","street_rest","street_boss"})

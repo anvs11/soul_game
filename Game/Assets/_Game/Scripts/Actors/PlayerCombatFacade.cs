@@ -52,6 +52,9 @@ namespace Game.Actors
         {
             EnsureReferences();
             if (deathSent || snapshot.IsDead) throw new InvalidOperationException("Cannot transfer a dead hero.");
+            if (snapshot.MaxHealth != receiver.MaxHealth || snapshot.MaxArmor != receiver.MaxArmor ||
+                snapshot.MagazineCapacity != weapon.State.MagazineCapacity || snapshot.MaxStamina != weapon.State.MaxStamina)
+                throw new InvalidOperationException("Encounter transfer maxima differ from the destination actor.");
             receiver.RestoreForEncounter(snapshot.Health, snapshot.Armor);
             weapon.State.RestoreForEncounter(snapshot.Magazine, snapshot.ReserveAmmo, snapshot.Stamina, snapshot.IsMelee);
             PublishState();

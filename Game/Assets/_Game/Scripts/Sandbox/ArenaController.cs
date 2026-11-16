@@ -5,6 +5,7 @@ using Game.Combat;
 using Game.Contracts;
 using Game.Core;
 using Game.UI;
+using Game.Street;
 using UnityEngine;
 
 namespace Game.Sandbox
@@ -98,7 +99,10 @@ namespace Game.Sandbox
         private void OnEnemyDied()
         {
             foreach (var enemy in combatants) if (enemy is MonoBehaviour component && component != null && enemy.IsDead) alive.Remove(enemy);
-            if (exit != null) exit.GetComponent<SpriteRenderer>().color = alive.Count == 0 ? Color.green : Color.red;
+            if (run != null && run.CurrentRequest.IsStreetRun && !IsBossEncounter && alive.Count == 0)
+                exit.GetComponent<StreetExitPortal>().TryOpen(player);
+            else if (exit != null && (run == null || !run.CurrentRequest.IsStreetRun))
+                exit.GetComponent<SpriteRenderer>().color = alive.Count == 0 ? Color.green : Color.red;
             UpdateEncounter();
             if (IsBossEncounter && alive.Count == 0) run?.FinishRun(RunOutcome.Victory);
         }
@@ -106,6 +110,7 @@ namespace Game.Sandbox
         public void TryExit()
         {
             if (run == null || run.Phase != RunPhase.InArena || IsPaused || player.IsDead || alive.Count != 0 || IsBossEncounter) return;
+            if (run.CurrentRequest.IsStreetRun && !exit.GetComponent<StreetExitPortal>().IsOpen) return;
             if (Vector2.Distance(player.transform.position, exit.position) > 1.5f) return;
             if (run.CurrentRequest.IsStreetRun) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot, run.SegmentIndex);
             else if (run.CurrentRequest.IsStage2Route) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot);
@@ -143,6 +148,12 @@ namespace Game.Sandbox
         }
         private void UpdateEncounter()
         {
+            if (run != null && run.CurrentRequest.IsStreetRun && !IsBossEncounter)
+            {
+                bool open = exit.GetComponent<StreetExitPortal>().IsOpen;
+                hud.SetEncounter(open ? "Портал открыт рядом. Подойдите и нажмите E" : "Зачистите боевую площадку");
+                return;
+            }
             if (hud != null) hud.SetEncounter(alive.Count > 0
                 ? "Зомби осталось " + alive.Count
                 : "Выход открыт. Подойдите к зелёному квадрату и нажмите E");

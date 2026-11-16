@@ -1,5 +1,6 @@
 using System;
 using Game.Actors;
+using Game.AI;
 using Game.Combat;
 using Game.Core;
 using Game.Sandbox;
@@ -25,6 +26,13 @@ namespace Game.Street
                 if (candidate != null && candidate.Id == CurrentModuleId) definition = candidate;
             if (definition == null) throw new InvalidOperationException("Missing street module " + CurrentModuleId);
             var module = Instantiate(definition.Prefab).GetComponent<StreetModule>();
+            foreach (var perception in module.GetComponentsInChildren<EnemyPerception>())
+            {
+                perception.enabled = false;
+                perception.Configure(10.5f, 14f, 2f, LayerMask.GetMask("World"));
+                perception.enabled = true;
+            }
+            module.Exit.gameObject.AddComponent<StreetExitPortal>().Initialize(definition);
             var hero = FindFirstObjectByType<PlayerCombatFacade>();
             hero.GetComponent<Rigidbody2D>().position = module.Entry.position;
             hero.transform.position = module.Entry.position;
