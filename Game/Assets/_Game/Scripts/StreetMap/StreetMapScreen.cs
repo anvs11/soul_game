@@ -24,6 +24,9 @@ namespace Game.StreetMap
         private readonly HashSet<string> cleared = new HashSet<string>(StringComparer.Ordinal);
         public RoomController[] Rooms { get; private set; }
         public int ClearedCount => cleared.Count;
+        public FixedMapPortal Portal {get;private set;}
+        public StreetMiniMap MiniMap {get;private set;}
+        private int lastStatus=-1;
         public event Action<string,string> RoomCleared;
         public PlayerCombatFacade Player => player;
         public bool IsPaused { get; private set; }
@@ -60,14 +63,18 @@ namespace Game.StreetMap
                 enemies[i].gameObject.SetActive(false);
             }
             CreateRooms(value.RunId);
+            MiniMap=gameObject.AddComponent<StreetMiniMap>();MiniMap.Initialize(this);
+            var portal=new GameObject("FinalPortal");portal.transform.SetParent(transform,false);
+            Portal=portal.AddComponent<FixedMapPortal>();Portal.Initialize(player.GetComponent<SpriteRenderer>().sprite);
             controls = GetComponent<BattleControls>() ?? gameObject.AddComponent<BattleControls>();
             controls.Initialize(TogglePause, Resume, Leave);
             if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = false;
             player.Died += OnPlayerDied;
             player.PauseRequested += TogglePause;
+            player.InteractRequested += TryExit;
             run.Changed += OnPhaseChanged;
             hud.Bind(player);
-            hud.SetHint("1-1 · S4-04A: комнаты и двери · WASD / Space / Q · Esc: домой\nВ combat_b две волны. Элита, награды и итоговый портал ещё не готовы");
+            hud.SetHint("1-1 · WASD / Space / Q · E: портал · Esc: пауза\nПроверочный бой вместо мини-боссов. Награды и настоящая элита ещё не готовы.");
             UpdateRoomLabel();
             OnPhaseChanged();
         }
@@ -85,6 +92,9 @@ namespace Game.StreetMap
                     visited[index] = true;
                 }
                 if (roomChanged) UpdateRoomLabel();
+                int status=ClearedCount*10000;
+                foreach(var room in Rooms)status+=room.State.PendingCount*100+room.State.AliveCount*10+(int)room.State.Phase;
+                if(lastStatus!=status){lastStatus=status;UpdateRoomLabel();}
                 return;
             }
         }
@@ -100,7 +110,7 @@ namespace Game.StreetMap
                 new[] {new Vector2(23,16),new Vector2(33,24)},
                 new[] {new Vector2(41,24),new Vector2(61,24)}
             };
-            Rooms = new RoomController[3];
+            Rooms = new RoomController[4];
             var sprite = player.GetComponent<SpriteRenderer>().sprite;
             for (int index=0;index<3;index++)
             {
@@ -121,21 +131,40 @@ namespace Game.StreetMap
                 room.Configure(runId,description,plan.Rooms[index+1],player,registry,new[]{enemies[index*2],enemies[index*2+1]},gates);
                 room.Cleared+=OnRoomCleared; Rooms[index]=room;
             }
+            var elite=StreetMapLayout.Rooms[4];
+            var diagnosticPoints=new[]{new SpawnPoint("diagnostic_0",-7,4,.6f,new[]{EnemyTypes.Melee}),new SpawnPoint("diagnostic_1",7,4,.6f,new[]{EnemyTypes.Melee})};
+            var description4=new EncounterRoom("elite",elite.Center.x,elite.Center.y,28,24,new RoomBudget(2,2,2,1),diagnosticPoints);
+            var plan4=new RoomPlan("elite",new[]{new WavePlan("diagnostic",0,new[]{new SpawnPlan("elite/diagnostic/0",EnemyTypes.Melee,"diagnostic_0"),new SpawnPlan("elite/diagnostic/1",EnemyTypes.Melee,"diagnostic_1")})});
+            var actors4=new SandboxEnemy[2];
+            for(int i=0;i<2;i++){actors4[i]=Instantiate(enemies[0]);actors4[i].name="DiagnosticElite_"+i;actors4[i].transform.SetParent(transform,false);actors4[i].gameObject.SetActive(false);}
+            var finalGate=new GameObject("EliteDoor").AddComponent<DoorController>();finalGate.transform.SetParent(transform,false);finalGate.Configure(sprite,new Vector2(69,24),new Vector2(.5f,4));
+            var finalRoom=new GameObject("EliteDiagnostic").AddComponent<RoomController>();finalRoom.transform.SetParent(transform,false);
+            finalRoom.Configure(runId,description4,plan4,player,registry,actors4,new[]{finalGate});finalRoom.Cleared+=OnRoomCleared;Rooms[3]=finalRoom;
         }
         private void OnRoomCleared(RoomController room)
         {
             if (run == null || room.RunId != run.RunId || !cleared.Add(room.RoomId)) return;
             UpdateRoomLabel();
             RoomCleared?.Invoke(room.RunId,room.RoomId); // Future rewards subscribe here, no reward system yet.
+            if(ClearedCount==4)Portal.TryOpen(player);
         }
         private void UpdateRoomLabel()
         {
-            if (CurrentRoomId=="elite") { hud.SetEncounter("Элитная комната НЕ ГОТОВА\nТри метки — заглушки, не мини-боссы"); return; }
-            string text="1-1 · "+CurrentRoomId+" · очищено "+ClearedCount+"/3 обычных";
+            string text="1-1 · "+CurrentRoomId+" · пройдено "+ClearedCount+"/4";
+            if(CurrentRoomId=="elite")text+="\nПроверочный бой, НЕ мини-боссы";
             if (Rooms!=null) foreach (var room in Rooms)
                 if (room.RoomId==CurrentRoomId)
-                    text+="\n"+(room.State.Phase==RoomPhase.Cleared ? "Проходы открыты" : "Двери ждут все волны");
+                    text+="\n"+(room.State.Phase==RoomPhase.Cleared ? "Проходы открыты" : "Живых: "+room.State.AliveCount+" · ожидается: "+room.State.PendingCount);
+            if(ClearedCount==4)text+="\n"+(Portal!=null && Portal.IsOpen?"Портал открыт · подойдите и нажмите E":"Нажмите E для размещения портала");
             hud.SetEncounter(text);
+        }
+        public void TryExit()
+        {
+            if(run==null || run.Phase!=RunPhase.InArena || IsPaused || player.IsDead || ClearedCount!=4)return;
+            if(!Portal.TryOpen(player)){UpdateRoomLabel();return;}
+            UpdateRoomLabel();
+            if(Vector2.Distance(player.transform.position,Portal.transform.position)>1.5f)return;
+            run.FinishRun(RunOutcome.Victory);
         }
         private void CancelRooms()
         { if (Rooms!=null) foreach (var room in Rooms) if (room!=null) room.Cancel(); }
@@ -179,6 +208,7 @@ namespace Game.StreetMap
             {
                 player.Died -= OnPlayerDied;
                 player.PauseRequested -= TogglePause;
+                player.InteractRequested -= TryExit;
                 player.SetControlsEnabled(false);
                 player.GetComponent<ProjectilePool>()?.ClearActive();
             }

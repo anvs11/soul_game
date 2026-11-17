@@ -101,7 +101,7 @@ namespace Game.Tests
             }
             commands.Move = Vector2.zero;
             yield return new WaitForFixedUpdate(); yield return null;
-            Assert.That(killed, Is.EqualTo(6));
+            Assert.That(killed, Is.EqualTo(8), "Six ordinary and two explicit final diagnostic enemies.");
             for (int index = 0; index < 5; index++) Assert.That(screen.HasVisited(index), Is.True);
             Assert.That(screen.CurrentRoomId, Is.EqualTo("elite"));
             Assert.That(screen.IsCombatReady, Is.False);
@@ -109,7 +109,7 @@ namespace Game.Tests
             var camera = Object.FindFirstObjectByType<BoundedFollowCamera>();
             Assert.That(camera.transform.position.x, Is.GreaterThan(75));
             Assert.That((Vector2)camera.transform.position, Is.EqualTo(BoundedFollowCamera.Clamp(hero.transform.position, camera.Bounds, camera.GetComponent<Camera>().orthographicSize, camera.GetComponent<Camera>().aspect)));
-            TestContext.WriteLine("S4_02_WALK 8 waypoints; 5 rooms; 6 fixed melee; camera followed; elite NOT READY.");
+            TestContext.WriteLine("S4_04B_WALK 8 waypoints; 5 rooms; 8 diagnostic melee; camera followed; real elite NOT READY.");
         }
 
         [UnityTest]
