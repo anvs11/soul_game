@@ -57,7 +57,7 @@ namespace Game.Core
         public void StartRun(RunRequest request)
         {
             if (disposed || Phase != RunPhase.Home) return;
-            if (request.ArenaId != ScenePaths.CombatSandbox && request.ArenaId != ScenePaths.Stage2CombatSandbox && !request.IsStreetRun)
+            if (request.ArenaId != ScenePaths.CombatSandbox && request.ArenaId != ScenePaths.Stage2CombatSandbox && !request.IsStreetRun && !request.IsFixedStreet1_1)
                 throw new ArgumentException("Unknown arena profile.", nameof(request));
 
             if (request.IsStage2Route && request.ArenaId != ScenePaths.Stage2CombatSandbox)
