@@ -1,3 +1,15 @@
+# S4-04B — 18 ноября 2026
+
+Пользователь вручную принял двери S4-04A. Новые требования записаны в Game/Docs/S4_MAP_FEEDBACK_2026_11_18.md: ordinary6–8, все3 вида, seeded позиции за укрытиями, полная мини-карта/герой, будущие городские здания/машины/шины/столбы/баки. Целевую плотность/укрытия передать S4-03/06; текущая runtime-карта ещё диагностическая.
+
+Добавлены полная мини-карта/SafeArea/visited/жёлтый маркер, без enemy-информации; текущий HUD/4 встречи; четвёртая явно diagnostic встреча2 melee вместо отсутствующих мини-боссов. После4 Cleared один безопасный портал в elite, повтор размещения E при помехе/проверка дистанции/паузы/Home. Старые2/1+1/2 сохраняются для этого фиксированного прогона, целевые6–8 не объявляются подключёнными. Scene/prefab/Combat/Actors/Input не заменялись.
+
+Новый StreetMapCatalog.Create по точным S4-01 типам: MapVersion2/Geometry1,32 точки, ordinary budget6–8/8 кандидатов на комнату. Unity exporter создал Game/Docs/Exports/S4_FIXED_MAP_V2.json без перезаписи других assets; реальная физика World/BFS:1920 достижимых клеток,5 комнат, все точки и финальный выход. Реальные CircleCollider2D/lossyScale4 исходных prefab проверены EditMode. Elite proxy1 свободен, но elitePrefabsCertified=false до новых prefab/предупреждений/дочерних точек.
+
+Полный EditMode108/108, failed/skipped/inconclusive0, exit0: Game/TestResults/s404b-20261118-e91d/EditMode/results.xml. Первый PlayMode104/106, exit2, два новых fixtures исправлены (UI hierarchy и синхронизация Rigidbody/transform); исходный XML сохранён. Итоговый полный PlayMode2 **106/106**, failed/skipped/inconclusive0, exit0, duration195.3275288 s: Game/TestResults/s404b-20261118-e91d/PlayMode2/results.xml. Код3567960c147dd02fe2b7ef021c575cbb7b1742c7,15 путей; handoff/заметки/ExecPlan/статус отдельным commit. Передача Game/Docs/S4_04_MAP_CATALOG_HANDOFF.md, ExecPlan обновлён.1000 seed остаются У1/S4-03, алгоритм ещё не получен. Ручной новый UI/финал, отдельный Player/Android/нагрузка NOT RUN. Ваши четыре dirty файла и scratch сохранены, push не запрошен.
+
+---
+
 # S4-04A после S4-01 — 18 ноября 2026
 
 По поручению пользователя сначала выполнен S4-01 за У 1: ветка feat/stage4-encounters от готовой карты4e42f8a, контрактный hash5a78ec697045d4c132bd9e251dd5a24ee2c6dd89, focused Unity EditMode12/12. Game/Docs/S4_01_CONTRACT.md фиксирует неизменяемые данные/Id/версии/конструкторы/время волн, явные отказы, ресурсный API, разрешения состояний/команду кувырка, владение общими Actors/Combat/Input и конечные summon слоты. Созданы данные/пример5 комнат/структурный validator/интерфейсы, а не алгоритм/боевые механики. Затем контракт локальным ff подключён в feat/stage4-map.
