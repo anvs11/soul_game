@@ -13,6 +13,11 @@ namespace Game.UI
         private Text status, titleLabel, descriptionLabel;
         public Button PrimaryButton { get; private set; }
         public Button SecondaryButton { get; private set; }
+        public Button StreetButton { get; private set; }
+        protected virtual bool ShowStreet => false;
+        protected virtual void OnViewCreated(Transform panel, Font font) { }
+        protected virtual void OnViewRefreshed() { }
+        protected virtual void ActStreet(RunCoordinator value) { }
         protected virtual string SecondaryLabel => null;
         protected virtual bool ShowSecondary => true;
         protected virtual bool CanSecondaryAct(RunCoordinator value) => false;
@@ -71,8 +76,14 @@ namespace Game.UI
                 SecondaryButton.gameObject.SetActive(!failed && ShowSecondary);
                 SecondaryButton.interactable = CanSecondaryAct(coordinator);
             }
+            if (StreetButton != null)
+            {
+                StreetButton.gameObject.SetActive(!failed && ShowStreet);
+                StreetButton.interactable = coordinator.Phase == RunPhase.Home;
+            }
             PrimaryButton.interactable = failed || CanAct(coordinator);
             PrimaryButton.GetComponentInChildren<Text>().text = failed ? "Повторить переход домой" : ButtonLabel;
+            OnViewRefreshed();
             status.text = failed
                 ? "Не удалось перейти между сценами.\n" + coordinator.Error
                 : Message(coordinator);
@@ -112,9 +123,12 @@ namespace Game.UI
             titleLabel = Label("Title", panel, font, Title, 44, new Vector2(0, 160), new Vector2(840, 80));
             descriptionLabel = Label("Description", panel, font, Description, 25, new Vector2(0, 55), new Vector2(840, 140));
             status = Label("Status", panel, font, "", 20, new Vector2(0, -70), new Vector2(840, 95));
+            status.resizeTextForBestFit = true;
+            status.resizeTextMinSize = 12;
+            status.resizeTextMaxSize = 20;
 
             var buttonRect = Rect("PrimaryButton", panel);
-            buttonRect.anchoredPosition = new Vector2(0, -190);
+            buttonRect.anchoredPosition = new Vector2(0, -160);
             buttonRect.sizeDelta = new Vector2(540, 70);
             var image = buttonRect.gameObject.AddComponent<Image>();
             image.color = new Color(0.12f, 0.47f, 0.35f);
@@ -126,7 +140,7 @@ namespace Game.UI
             if (SecondaryLabel != null)
             {
                 var secondary = Rect("SecondaryButton", panel);
-                secondary.anchoredPosition = new Vector2(0, -275); secondary.sizeDelta = new Vector2(600, 65);
+                secondary.anchoredPosition = new Vector2(0, -240); secondary.sizeDelta = new Vector2(600, 65);
                 var secondaryImage = secondary.gameObject.AddComponent<Image>();
                 secondaryImage.color = new Color(.24f, .32f, .46f);
                 SecondaryButton = secondary.gameObject.AddComponent<Button>();
@@ -138,8 +152,26 @@ namespace Game.UI
                     if (coordinator != null && CanSecondaryAct(coordinator)) ActSecondary(coordinator);
                 });
             }
+            if (this is HomeScreen && Application.CanStreamedLevelBeLoaded(ScenePaths.Stage3StreetSandbox)) CreateStreetButton(panel, font);
+            OnViewCreated(panel, font);
         }
 
+        private void CreateStreetButton(Transform panel, Font font)
+        {
+            var rect = Rect("StreetButton", panel);
+            rect.anchoredPosition = new Vector2(-100, -320);
+            rect.sizeDelta = new Vector2(380, 65);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.color = new Color(.35f, .3f, .15f);
+            StreetButton = rect.gameObject.AddComponent<Button>();
+            StreetButton.targetGraphic = image;
+            StreetButton.navigation = new Navigation { mode = Navigation.Mode.None };
+            Label("Label", rect, font, "StreetRun · seed-прототип", 21, Vector2.zero, rect.sizeDelta);
+            StreetButton.onClick.AddListener(() =>
+            {
+                if (coordinator != null && coordinator.Phase == RunPhase.Home && ShowStreet) ActStreet(coordinator);
+            });
+        }
         private static RectTransform Rect(string name, Transform parent)
         {
             var rect = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();

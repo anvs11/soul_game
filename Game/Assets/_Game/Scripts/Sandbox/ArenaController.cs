@@ -5,6 +5,7 @@ using Game.Combat;
 using Game.Contracts;
 using Game.Core;
 using Game.UI;
+using Game.Street;
 using UnityEngine;
 
 namespace Game.Sandbox
@@ -63,7 +64,7 @@ namespace Game.Sandbox
             }
             run = value;
             player.SetControlsEnabled(false);
-            if (IsBossEncounter && value.PlayerTransfer.HasValue) player.RestoreForEncounter(value.PlayerTransfer.Value);
+            if ((IsBossEncounter || value.CurrentRequest.IsStreetRun) && value.PlayerTransfer.HasValue) player.RestoreForEncounter(value.PlayerTransfer.Value);
             player.GetComponent<AutoAimSelector>().Configure(registry);
             foreach (var enemy in combatants)
             {
@@ -91,12 +92,34 @@ namespace Game.Sandbox
                 hud.SetHint("Stage 2 · диагностическая арена без босса · WASD / Space / Q / E");
             if (run.CurrentRequest.IsStage2Route)
                 hud.SetHint(IsBossEncounter ? "Полицейский · уклоняйтесь от подготовки и очередей · Esc: пауза" : "Stage 2 · зачистите 3 врагов и идите к выходу E · осторожно: бочка");
+            if (run.CurrentRequest.IsStreetRun)
+                hud.SetHint("Улица 1." + run.SegmentIndex + "/5 · " + run.StreetRoute.ModuleIds[run.SegmentIndex - 1] + " · WASD / Space / Q / E");
+            if (run.StreetGeneration != null)
+            {
+                var generated = run.StreetGeneration;
+                string fallback = "";
+                if (generated.UsedFallback)
+                {
+                    string reason = generated.Diagnostic;
+                    int start = reason.IndexOf("last rejection=", System.StringComparison.Ordinal);
+                    if (start >= 0) reason = reason.Substring(start + "last rejection=".Length);
+                    int end = reason.IndexOf("; validated fallback", System.StringComparison.Ordinal);
+                    if (end >= 0) reason = reason.Substring(0, end);
+                    if (reason.Length > 100) reason = reason.Substring(0, 100) + "…";
+                    fallback = " · резерв: " + reason;
+                }
+                hud.SetHint("Улица 1." + run.SegmentIndex + "/5 · " + run.StreetRoute.ModuleIds[run.SegmentIndex - 1] +
+                    " · seed " + generated.Layout.Seed + " · G" + generated.Layout.GeneratorVersion + "/C" + generated.Layout.ContentVersion + fallback);
+            }
             OnPhaseChanged();
         }
         private void OnEnemyDied()
         {
             foreach (var enemy in combatants) if (enemy is MonoBehaviour component && component != null && enemy.IsDead) alive.Remove(enemy);
-            if (exit != null) exit.GetComponent<SpriteRenderer>().color = alive.Count == 0 ? Color.green : Color.red;
+            if (run != null && run.CurrentRequest.IsStreetRun && !IsBossEncounter && alive.Count == 0)
+                exit.GetComponent<StreetExitPortal>().TryOpen(player);
+            else if (exit != null && (run == null || !run.CurrentRequest.IsStreetRun))
+                exit.GetComponent<SpriteRenderer>().color = alive.Count == 0 ? Color.green : Color.red;
             UpdateEncounter();
             if (IsBossEncounter && alive.Count == 0) run?.FinishRun(RunOutcome.Victory);
         }
@@ -104,8 +127,21 @@ namespace Game.Sandbox
         public void TryExit()
         {
             if (run == null || run.Phase != RunPhase.InArena || IsPaused || player.IsDead || alive.Count != 0 || IsBossEncounter) return;
+            if (run.CurrentRequest.IsStreetRun)
+            {
+                var portal = exit.GetComponent<StreetExitPortal>();
+                // Retry only on an explicit interaction after all combat/phase guards.
+                // A temporary obstruction during the last death must not strand a cleared run.
+                if (!portal.IsOpen && !portal.TryOpen(player))
+                {
+                    UpdateEncounter();
+                    return;
+                }
+                UpdateEncounter();
+            }
             if (Vector2.Distance(player.transform.position, exit.position) > 1.5f) return;
-            if (run.CurrentRequest.IsStage2Route) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot);
+            if (run.CurrentRequest.IsStreetRun) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot, run.SegmentIndex);
+            else if (run.CurrentRequest.IsStage2Route) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot);
             else run.FinishRun(RunOutcome.Victory);
         }
         private void OnPhaseChanged()
@@ -140,6 +176,12 @@ namespace Game.Sandbox
         }
         private void UpdateEncounter()
         {
+            if (run != null && run.CurrentRequest.IsStreetRun && !IsBossEncounter)
+            {
+                bool open = exit.GetComponent<StreetExitPortal>().IsOpen;
+                hud.SetEncounter(open ? "Портал открыт рядом. Подойдите и нажмите E" : alive.Count == 0 ? "Площадка зачищена. Нажмите E для размещения выхода" : "Зачистите боевую площадку");
+                return;
+            }
             if (hud != null) hud.SetEncounter(alive.Count > 0
                 ? "Зомби осталось " + alive.Count
                 : "Выход открыт. Подойдите к зелёному квадрату и нажмите E");

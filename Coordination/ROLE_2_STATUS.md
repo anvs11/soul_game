@@ -1,3 +1,27 @@
+# S3-06A — 16 ноября2026
+
+Локально объединён У1 feat/stage3-layout07fa645, merge6450940, последние личные планы сохранены. Добавлен Resources-каталог, Unity→StageCatalog адаптер, явное seed-поле Home, preflight/повторная валидация в Core, метаданные G1/C1/seed/fallback в HUD/логе. Генератор У1 выбирает5 ModuleId в диагностическом прототипе, целевое уточнение постоянной карты остаётся отдельным следующим контрактом. Экспорт Game/Docs/Exports/S3_STREET_CATALOG.json пригоден для S3-05 У1.
+
+Полные Windows Editor78/78 EditMode и91/91 PlayMode, затем GeneratedStreetRunTests3/3 (два повторных+один новый), failed/skipped/inconclusive0, exit0.92 различных PlayMode по двум XML. Реальный каталог прошёл1000 seed C# и отдельно Python,1000 успехов/81 схема/без замечаний moduleReview. Подробности, SHA, файлы и ограничения — S3_06_RUNTIME_HANDOFF.md. Новая ручная/платформенная приёмка открыта. Для У1 подготовлена передача на S3-07, ветка feat/stage3-runtime отправляется по запросу передачи. Ниже история.
+
+---
+
+# S3-04B — 16 ноября2026
+
+StreetRun обнаружение10.5/14, память2; ближний портал после зачистки с World/границами/занятостью и единственным размещением. Уточнены сохранение ресурсов/максимумов и граница LoadingArena. Полные Windows Editor EditMode46/46, PlayMode89/89, failed/skipped/inconclusive0, exit0. Проверены10 попыток, реальные активные пулы, исходы/фокус/пауза/новые герои и transient states. Передача S3_04B_HANDOFF.md, XML по ссылкам в ней. Ручная приёмка новых изменений открыта.
+
+Пользователь уточнил целевую структуру: постоянная карта нескольких комнат каждой стадии, случайные составы столкновений, портал после всей карты, мини-боссы1-1/1-2/1-4, сильный босс1-3 и финальный1-5. Документ STREET_MAP_AND_BOSS_STRATEGY.md и оба личных плана обновлены. У1 требуется прочитать уточнение до дальнейшего генератора. Полноценные карты/мини-боссы/лут ещё не реализованы. Следующая ограниченная задача — карта1-1 с несколькими комнатами и новый Encounter-контракт. Локальный коммит явных файлов, без отправки. Ниже история.
+
+---
+
+# S3-02 / S3-04A — 16 ноября2026
+
+Ветка feat/stage3-runtime от cc67773. Добавлены StreetRun в существующий Core и Bootstrap/Home, фиксированная пятёрка a,b,c,a,boss, новая Stage3StreetSandbox и6 отдельных prefab/asset модулей. Перенос ресурсов и промежуточные переходы работают, один RunId и индекс. Граница У1 — StartStreetRun(seed,StreetRoute), передача данных Game/Docs/S3_STREET_CATALOG.json. Namespace Generation не занят. ExecPlan S3_RUNTIME_PLAN.md, передача S3_04_MODULES_HANDOFF.md.
+
+Windows Editor полные EditMode45/45 и PlayMode86/86, failed/skipped/inconclusive0, exit0. Проверены физическая сетка6 модулей, BFS, площадка босса/кандидаты призыва, пять переходов, ресурсы, исход и повтор. Первичная compile error редакторского helper исправлена, лог сохранён. Ручной проход/баланс, генератор У1, расширенная S3-04B и Players/Android/замеры остаются открытыми. Следующая задача — ручной просмотр и S3-04B. Локальная фиксация собственных путей, без отправки. Ниже история.
+
+---
+
 # S2-07 — исправления по ручной проверке, 15 ноября 2026
 
 Исправлены оставшиеся белые метки стрелка/прыгуна после смерти и зафиксированное направление оружия после исчезновения цели. Без доступного врага направление теперь следует движению, стоя сохраняется; живая цель по-прежнему имеет приоритет. Бочка остаётся вне реестра/счётчика. Полный Windows PlayMode81/81, failed/skipped/inconclusive0, exit0, XML и новые три реальных сценария оружия/маркеров в Game/Docs/S2_07_HANDOFF.md. EditMode40/40 — предыдущая интеграция, сейчас не повторялся. Новая ручная приёмка и Android/standalone открыты. Сцены/prefab/v0.1 не менялись, локальная фиксация без push.
@@ -277,3 +301,25 @@ Unity-компиляция, импорт и генерация .meta, приме
 
 
 Ручная приёмка: 15 ноября 2026 пользователь подтвердил после исправлений: всё работает. Автоматические проверки81/81 PlayMode сохранены выше. Изменения передаются товарищу через feat/stage2-arenas; Android/standalone и независимое ревью остаются открытыми.
+
+## S3-06B — generated lifecycle на Mac, 16 ноября2026, роль2
+
+Основа d9dc3b545daa89a6c40fd93752a4e2f5bf9794a1, новая локальная ветка feat/stage3-runtime-validation, отдельная копия Game/TestResults/s306b-worktree внутри исходного проекта. Чужая грязная feat/stage3-layout не переключалась/не переписывалась. История Windows S3-06A и результаты У1 не присваиваются этому шагу. ExecPlan S3_RUNTIME_PLAN и новая передача S3_06B_LIFECYCLE_HANDOFF; исходный S3_06_RUNTIME_HANDOFF дополнен ссылкой.
+
+Исправлен P2 TryExit: после защитных условий Interact повторяет безопасное размещение ранее закрытого портала; дистанция выхода сохраняется, сканирования каждый кадр нет. HUD поясняет E после неудачного размещения. Новый GeneratedStreetLifecycleTests.cs/.meta проверяет десять Home seed-попыток/34 сегмента, победу/смерть/отказ на разных сегментах, активные пули/пулы, двойные запросы, приоритет смерти выхода/босса, новые RunId/объекты, ресурсы, HUD/версии/Id, один EventSystem и фактические anchors SafeArea. Старые Foundation/Street/Stage2 assertions не менялись. Геометрия/баланс/Generation/API не менялись.
+
+Первые новые2 теста:1 passed/1 timeout, exit2 из-за hit protection, включённой подготовительным ApplyDamage; исправлен только setup на RestoreForEncounter, XML сохранён. Focused2.xml2/2/2 passed и полный EditMode.xml78/78/78 passed, failed/skipped/inconclusive0, exit0. Результаты в Game/TestResults/s306b-validation внутри worktree; Полный PlayMode.xml94/94/94 passed, failed/skipped/inconclusive0, exit0, duration120.2601617с; новый полноценный набор на текущем diff. Focused2 входит в94, не прибавляется. В XML10 S306B исходов/34 сегмента; прежние FoundationFlow3, Stage2Arena7, Stage2RouteIntegration10, fixed StreetRun5 и GeneratedStreetRun3 прошли. Разрешение на внешний Unity6000.3.28f1 отдельно получено для S3-06B; текущий открытый Editor/lock не затрагивались.
+
+Ручной бой обычными8+16/ножом, застревания/сложность по сегментам,3 ручных seed включая fallback, Players/Android/мультитач/вырезы/замеры NOT RUN. Нет native Game View control; batch не называется ручной приёмкой. Утечки проверяются по объектам/поведению и DetachCombat, не memory-profiler. Следующий ограниченный шаг — ручной протокол по сегментам и review P2 У1. S3-06B/Stage3 целиком не Done. Commit/push/merge не выполняются этим поручением, XML/Library и черновики не добавляются.
+
+Итог S3-06B: исходные Assets кроме ArenaController равны d9dc3b5, новый test/meta GUID уникален, diff --check прошёл, индекс пуст. verified-summary.json сохраняет SHA/counts/исходники; XML/логи не в Git. P2 исправлен по новой recovery-регрессии, ждёт ревью У1; ручная/платформенная часть NOT RUN. Точная передача7 путей в S3_06B_LIFECYCLE_HANDOFF, без временных Runner-сцен. Коммит/push/merge не выполнялись.
+
+## S3-08 — сборочная частичная приёмка, 17 ноября2026, роль2
+
+Ветка feat/stage3-runtime-validation от d9dc3b5, прежние локальные7 файлов S3-06B сохранены как зависимость. Прочитано ревью У1 be0ff19/S3_07_ROLE1_REVIEW: старый диагностический Passed не считался fix. Recovery проверен новой регрессией. Добавлены Stage3 Windows/Android/Mac entry points, точные6 сцен Bootstrap/Home/прежние3 арены/Street, новый buildId/BuildReport и opt-in Development Player smoke. Прежние builders неизменны кроме partial keyword, новые meta уникальны. Generation/сцены/геометрия/баланс/Foundation assertions не менялись.
+
+Фактически новые полные Mac Unity6000.3.28f1 EditMode80/80/80, PlayMode94/94/94, failed/skipped/inconclusive0, exit0; XML/логи/runner-summary/exits в Game/TestResults/s308-validation относительно worktree. Mac Development build s3-20261116-210525-1d5ceb6e, GUID251d6ca7195f4434bf4e5177e54f2755, Succeeded/errors0/warnings1, exit0. Реальные batch и оконный Players exit0 подтвердили6 упакованных сцен/Bootstrap index0 и полные seed0/123 G1/C1, программно, не обычным боем.
+
+Оконный замер Mac16,8 / Apple M4 Pro / Mac OS X26.2.0 /1280×720:512 samples/5.004356384с, interval avg13.89755344мс/p95 14.06416512мс, GC available. BuildId/scenario совпали, полный Player-windowed.log сохранён. Это automated-windowed-seeds0-123-not-manual, не стресс/телефон. Первый batch достиг18000 samples раньше5с и не принимается как performance. Stage2 tool limits обходятся конкретной процедурой output/metadata/XML/полного лога, ограничения точных пиков/Android не устранены.
+
+Windows/Android builders реально PreflightFailed/exit1: отсутствуют модули, BuildReport/Players/APK не получены, телефон NOT RUN. Оба Player shutdown показывают ComputeBuffer disposal и native allocations без атрибуции: memory acceptance OPEN. Ручной бой/AI-сложность/3 seed/fallback, карта/Rest/отложенная волна и выбранное Android-устройство остаются OPEN. S3-08/вся Stage3 не Done, самостоятельной приёмки двух людей нет. Acceptance Game/Docs/S3_08_ACCEPTANCE.md содержит матрицу/API/артефакты/следующий ограниченный шаг. Локальная фиксация15 явных путей после полного staged diff; XML/Builds/Library/секреты/чужие черновики исключены, push/merge не выполняются.

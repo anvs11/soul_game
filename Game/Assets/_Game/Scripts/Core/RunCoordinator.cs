@@ -1,5 +1,7 @@
 using System;
 using Game.Contracts;
+using Game.Street;
+using Game.Generation;
 
 namespace Game.Core
 {
@@ -9,6 +11,11 @@ namespace Game.Core
         private RunOutcome? pendingOutcome;
         private bool disposed;
         private Func<CombatSnapshot> pendingAdvance;
+        public StreetRoute StreetRoute { get; private set; }
+        public int SegmentIndex { get; private set; }
+        private StreetRoute requestedStreetRoute;
+        private GenerationResult requestedGeneration;
+        public GenerationResult StreetGeneration { get; private set; }
         public string ActiveArena { get; private set; }
         public CombatSnapshot? PlayerTransfer { get; private set; }
 
@@ -30,14 +37,34 @@ namespace Game.Core
             Load(ScenePaths.Home, RunPhase.ReturningHome, RunPhase.Home);
         }
 
+        public void StartGeneratedStreetRun(GenerationResult result, StageCatalog catalog)
+        {
+            if (disposed || Phase != RunPhase.Home) return;
+            if (result == null || !result.IsSuccess) throw new ArgumentException("A successful generation result is required.");
+            var validation = new LayoutValidator().Validate(result.Layout, catalog);
+            if (!validation.IsValid) throw new ArgumentException(string.Join(" | ", validation.Reasons));
+            requestedGeneration = result;
+            try { StartStreetRun(result.Layout.Seed, StreetGenerationAdapter.ToRoute(result.Layout)); }
+            finally { requestedGeneration = null; }
+        }
+        public void StartStreetRun(int seed, StreetRoute route)
+        {
+            if (disposed || Phase != RunPhase.Home) return;
+            requestedStreetRoute = route ?? throw new ArgumentNullException(nameof(route));
+            try { StartRun(RunRequest.StreetRun(seed)); }
+            finally { requestedStreetRoute = null; }
+        }
         public void StartRun(RunRequest request)
         {
             if (disposed || Phase != RunPhase.Home) return;
-            if (request.ArenaId != ScenePaths.CombatSandbox && request.ArenaId != ScenePaths.Stage2CombatSandbox)
+            if (request.ArenaId != ScenePaths.CombatSandbox && request.ArenaId != ScenePaths.Stage2CombatSandbox && !request.IsStreetRun)
                 throw new ArgumentException("Unknown arena profile.", nameof(request));
 
             if (request.IsStage2Route && request.ArenaId != ScenePaths.Stage2CombatSandbox)
                 throw new ArgumentException("Stage 2 route must start in its ordinary arena.", nameof(request));
+            StreetRoute = request.IsStreetRun ? requestedStreetRoute ?? Game.Street.StreetRoute.Fixed() : null;
+            StreetGeneration = request.IsStreetRun ? requestedGeneration : null;
+            SegmentIndex = request.IsStreetRun ? 1 : 0;
             CurrentRequest = request;
             ActiveArena = request.ArenaId;
             PlayerTransfer = null;
@@ -57,10 +84,13 @@ namespace Game.Core
                 pendingOutcome = outcome;
         }
 
-        public void CompleteArena(string arena, Func<CombatSnapshot> readState)
+        public void CompleteArena(string arena, Func<CombatSnapshot> readState, int segmentIndex = 0)
         {
-            if (disposed || Phase != RunPhase.InArena || !CurrentRequest.IsStage2Route ||
-                arena != ScenePaths.Stage2CombatSandbox || ActiveArena != arena || readState == null) return;
+            if (disposed || Phase != RunPhase.InArena || ActiveArena != arena || readState == null) return;
+            bool streetAdvance = CurrentRequest.IsStreetRun && arena == ScenePaths.Stage3StreetSandbox &&
+                segmentIndex == SegmentIndex && SegmentIndex < 5;
+            bool stage2Advance = CurrentRequest.IsStage2Route && arena == ScenePaths.Stage2CombatSandbox;
+            if (!streetAdvance && !stage2Advance) return;
             if (pendingAdvance == null) pendingAdvance = readState;
         }
 
@@ -87,7 +117,12 @@ namespace Game.Core
                     return;
                 }
                 PlayerTransfer = state;
-                ActiveArena = ScenePaths.Stage2BossSandbox;
+                if (CurrentRequest.IsStreetRun)
+                {
+                    SegmentIndex++;
+                    ActiveArena = ScenePaths.Stage3StreetSandbox;
+                }
+                else ActiveArena = ScenePaths.Stage2BossSandbox;
                 Load(ActiveArena, RunPhase.LoadingArena, RunPhase.InArena);
             }
         }

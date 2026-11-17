@@ -6,7 +6,7 @@ using UnityEditor.Build.Reporting;
 using UnityEngine;
 namespace Game.Editor
 {
-    public static class BuildCommands
+    public static partial class BuildCommands
     {
         [Serializable] private sealed class Manifest
         {
