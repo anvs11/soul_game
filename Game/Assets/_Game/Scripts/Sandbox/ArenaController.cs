@@ -127,7 +127,18 @@ namespace Game.Sandbox
         public void TryExit()
         {
             if (run == null || run.Phase != RunPhase.InArena || IsPaused || player.IsDead || alive.Count != 0 || IsBossEncounter) return;
-            if (run.CurrentRequest.IsStreetRun && !exit.GetComponent<StreetExitPortal>().IsOpen) return;
+            if (run.CurrentRequest.IsStreetRun)
+            {
+                var portal = exit.GetComponent<StreetExitPortal>();
+                // Retry only on an explicit interaction after all combat/phase guards.
+                // A temporary obstruction during the last death must not strand a cleared run.
+                if (!portal.IsOpen && !portal.TryOpen(player))
+                {
+                    UpdateEncounter();
+                    return;
+                }
+                UpdateEncounter();
+            }
             if (Vector2.Distance(player.transform.position, exit.position) > 1.5f) return;
             if (run.CurrentRequest.IsStreetRun) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot, run.SegmentIndex);
             else if (run.CurrentRequest.IsStage2Route) run.CompleteArena(gameObject.scene.name, player.ReadSnapshot);
@@ -168,7 +179,7 @@ namespace Game.Sandbox
             if (run != null && run.CurrentRequest.IsStreetRun && !IsBossEncounter)
             {
                 bool open = exit.GetComponent<StreetExitPortal>().IsOpen;
-                hud.SetEncounter(open ? "Портал открыт рядом. Подойдите и нажмите E" : "Зачистите боевую площадку");
+                hud.SetEncounter(open ? "Портал открыт рядом. Подойдите и нажмите E" : alive.Count == 0 ? "Площадка зачищена. Нажмите E для размещения выхода" : "Зачистите боевую площадку");
                 return;
             }
             if (hud != null) hud.SetEncounter(alive.Count > 0
