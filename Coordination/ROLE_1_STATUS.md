@@ -1,3 +1,11 @@
+# S4-01 — 18 ноября 2026
+
+По прямому поручению пользователя первый шаг У 1 выполнен в его Windows-клоне исполнителем У 2 перед S4-04A. Ветка feat/stage4-encounters от проверенной карты 4e42f8a, локальный main ca5c26d сохранён. Контракт Game/Docs/S4_01_CONTRACT.md записан до кода, ExecPlan Game/Docs/Plans/S4_ENCOUNTER_PLAN.md. Созданы Game.Encounters immutable Map/Room/Point/Budget/Request/Spawn/Wave/RoomPlan/Plan/Result, IEncounterPlanner, структурный validator и пример 5 комнат с задержанной wave/elite3/2. Дополнительные IRunResourceSink/IActorActionGate/IDodgeCommandSink — только интерфейсы; v0.1/DamagePacket/боевые/input файлы не изменены. Зафиксированы source-owned эффекты/таблица разрешений/кувырок, владение общими файлами и конечные слоты призывов в pending до материализации/явной отмены.
+
+Unity6000.3.28f1, focused EditMode EncounterContractTests: 12 discovered/executed/passed, failed/skipped/inconclusive0, exit0. XML Game/TestResults/s401-20261118-a832/edit1/EditMode.xml. Реализован каркас, а не seed-алгоритм S4-03/1000 seed, мини-боссы/ресурсы/кувырок S4-05. Синтетическая карта не является аттестованным физикой каталогом. Player/Android/Mac/ручной бой/performance NOT RUN. Пользовательские dirty документы/ProjectSettings.asset и scratch сохранены, lock/процессы не удалялись/не завершались. Передача У 2 — локальный коммит S4-01, точный hash будет записан в S4-04A; публикация не запрошена.
+
+---
+
 # Корректировки босса — 15 ноября2026
 
 После ручной проверки бочка принята. Пули босса15/.1с, штатный урон сохраняет защиту. Призыв2 один раз на стадии2,4 один раз после кувырка стадии3, без пополнения. Выжившие предыдущей стадии остаются, лимит6. Герой быстрее на10%, speed5.5. Неполное размещение миньонов в первом тесте исправлено перебором безопасных позиций.
