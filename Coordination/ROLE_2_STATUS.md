@@ -1,3 +1,15 @@
+# S4-02 — 18 ноября 2026, У 2
+
+База main ca5c26d, новая локальная ветка feat/stage4-map. Созданы ExecPlan Game/Docs/Plans/S4_MAP_RUNTIME_PLAN.md и передача Game/Docs/S4_02_MAP_HANDOFF.md. Новый FixedStreet1_1 через действующий Bootstrap/RunCoordinator/SceneFlow, отдельная Home-кнопка, Stage4StreetMap и geometry prefab: безопасный entry, combat_a/b/c, elite 28×24, четыре коридора шириной 4, физические World-стены и камера с границами. Шесть исходных melee в фиксированных точках активируются при посещении; elite явно NOT READY, 3 метки не являются мини-боссами. Победа за проход заглушки/убийство обычных врагов не выдаётся. Доступны пауза/выход/смерть, результат 1-1/Home и новый старт. Финальный контракт четырёх Cleared/единственного портала записан для следующих шагов.
+
+Код локально зафиксирован в cdb557898588ca067dba3c9ec51d2311dcdf78d7, 22 явных пути. Handoff/ExecPlan/этот статус — отдельный следующий документационный commit. Передавать оба. Реальные PNG entry/elite/map осмотрены, рендер exit0; схема находится в Game/TestResults/s402-preview-20261117-211404-90c08433/map.png (UTC в имени папки).
+
+Реальный Unity 6000.3.28f1: create2 exit0; полные EditMode 87/87 и PlayMode 97/97, failed/skipped/inconclusive0, оба exit0. XML Game/TestResults/s402-20261118-57a9df/edit1/EditMode.xml и play1/PlayMode.xml. 7 новых EditMode и 3 новых PlayMode входят в общие числа; прежние assertions не менялись. Вся карта пройдена настоящим Rigidbody2D/ActorMotor2D через 8 контрольных точек, проверены стены, камера, посещение/активация, пауза/возврат/новый RunId и приоритет смерти. Прежние профили прошли полную регрессию.
+
+Пользовательские dirty файлы и старые scratch сохранены; ProjectSettings.asset побайтно прежний (SHA в handoff). Исходные сцены/prefabs/Generation/Actors/Combat/Input не заменялись. Существующий EditorBuildSettings дополнен только новой сценой. Пользовательский процесс не завершался и lock не удалялся. S4-01 ещё не получен, копий Game.Encounters нет. Ручной бой/Game View/Player/Android/мультитач/performance NOT RUN; весь Stage 4 не принят. Следующий отдельный шаг — ручной осмотр S4-02, затем S4-04A двери/комнаты и S4-04B мини-карта/экспорт/портал. Push/merge не выполнялись.
+
+---
+
 # S3-06A — 16 ноября2026
 
 Локально объединён У1 feat/stage3-layout07fa645, merge6450940, последние личные планы сохранены. Добавлен Resources-каталог, Unity→StageCatalog адаптер, явное seed-поле Home, preflight/повторная валидация в Core, метаданные G1/C1/seed/fallback в HUD/логе. Генератор У1 выбирает5 ModuleId в диагностическом прототипе, целевое уточнение постоянной карты остаётся отдельным следующим контрактом. Экспорт Game/Docs/Exports/S3_STREET_CATALOG.json пригоден для S3-05 У1.
