@@ -18,5 +18,14 @@ namespace Game.Tests
             var paths=BuildCommands.Stage3ScenePaths(); paths[0]="preview";
             Assert.That(BuildCommands.Stage3ScenePaths()[0],Does.EndWith("Bootstrap.unity"));
         }
+        [Test] public void Stage4BuildAddsThePlayableMapToTheRuntimeScenes()
+        {
+            var scenes = BuildCommands.Stage4ScenePaths();
+            Assert.That(scenes, Is.EqualTo(new[] { "Assets/_Game/Scenes/Bootstrap.unity", "Assets/_Game/Scenes/Home.unity",
+                "Assets/_Game/Scenes/CombatSandbox.unity", "Assets/_Game/Scenes/Stage2CombatSandbox.unity",
+                "Assets/_Game/Scenes/Stage2BossSandbox.unity", "Assets/_Game/Scenes/Stage3StreetSandbox.unity",
+                "Assets/_Game/Scenes/Stage4StreetMap.unity" }));
+            foreach (var scene in scenes) Assert.That(File.Exists(scene), Is.True, scene);
+        }
     }
 }

@@ -1,0 +1,574 @@
+{
+    "mapId": "fixed_street_1_1",
+    "mapVersion": 3,
+    "geometryVersion": 1,
+    "cellSize": 1.0,
+    "elitePrefabsCertified": true,
+    "certification": "Stage4Combat circle colliders at all elite points. Summon ring validated at authored starts; runtime rechecks live occupancy and walls.",
+    "reachableCells": 1920,
+    "rooms": [
+        {
+            "roomId": "entry",
+            "centerX": 0.0,
+            "centerY": 0.0,
+            "width": 14.0,
+            "height": 12.0,
+            "isElite": false,
+            "minEnemies": 0,
+            "maxEnemies": 0,
+            "maxCost": 0,
+            "maxWaves": 0,
+            "maxSummons": 0,
+            "points": [
+                {
+                    "pointId": "hero_entry",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": true,
+                    "allowedEnemyTypeIds": []
+                }
+            ]
+        },
+        {
+            "roomId": "combat_a",
+            "centerX": 23.0,
+            "centerY": 0.0,
+            "width": 20.0,
+            "height": 16.0,
+            "isElite": false,
+            "minEnemies": 6,
+            "maxEnemies": 8,
+            "maxCost": 8,
+            "maxWaves": 1,
+            "maxSummons": 0,
+            "points": [
+                {
+                    "pointId": "hero_entry",
+                    "x": -8.0,
+                    "y": 0.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": true,
+                    "allowedEnemyTypeIds": []
+                },
+                {
+                    "pointId": "ordinary_0",
+                    "x": -6.0,
+                    "y": -4.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_1",
+                    "x": 0.0,
+                    "y": -4.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_2",
+                    "x": 6.0,
+                    "y": -4.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_3",
+                    "x": -6.0,
+                    "y": 2.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_4",
+                    "x": 0.0,
+                    "y": 2.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_5",
+                    "x": 6.0,
+                    "y": 2.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_6",
+                    "x": -3.0,
+                    "y": 5.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_7",
+                    "x": 3.0,
+                    "y": 5.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                }
+            ]
+        },
+        {
+            "roomId": "combat_b",
+            "centerX": 23.0,
+            "centerY": 24.0,
+            "width": 20.0,
+            "height": 16.0,
+            "isElite": false,
+            "minEnemies": 6,
+            "maxEnemies": 8,
+            "maxCost": 8,
+            "maxWaves": 1,
+            "maxSummons": 0,
+            "points": [
+                {
+                    "pointId": "hero_entry",
+                    "x": 0.0,
+                    "y": -6.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": true,
+                    "allowedEnemyTypeIds": []
+                },
+                {
+                    "pointId": "ordinary_0",
+                    "x": -6.0,
+                    "y": -4.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_1",
+                    "x": 0.0,
+                    "y": -4.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_2",
+                    "x": 6.0,
+                    "y": -4.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_3",
+                    "x": -6.0,
+                    "y": 2.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_4",
+                    "x": 0.0,
+                    "y": 2.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_5",
+                    "x": 6.0,
+                    "y": 2.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_6",
+                    "x": -3.0,
+                    "y": 5.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_7",
+                    "x": 3.0,
+                    "y": 5.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                }
+            ]
+        },
+        {
+            "roomId": "combat_c",
+            "centerX": 51.0,
+            "centerY": 24.0,
+            "width": 20.0,
+            "height": 16.0,
+            "isElite": false,
+            "minEnemies": 6,
+            "maxEnemies": 8,
+            "maxCost": 8,
+            "maxWaves": 1,
+            "maxSummons": 0,
+            "points": [
+                {
+                    "pointId": "hero_entry",
+                    "x": -8.0,
+                    "y": 0.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": true,
+                    "allowedEnemyTypeIds": []
+                },
+                {
+                    "pointId": "ordinary_0",
+                    "x": -6.0,
+                    "y": -4.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_1",
+                    "x": 0.0,
+                    "y": -4.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_2",
+                    "x": 6.0,
+                    "y": -4.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_3",
+                    "x": -6.0,
+                    "y": 2.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_4",
+                    "x": 0.0,
+                    "y": 2.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_5",
+                    "x": 6.0,
+                    "y": 2.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_6",
+                    "x": -3.0,
+                    "y": 5.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                },
+                {
+                    "pointId": "ordinary_7",
+                    "x": 3.0,
+                    "y": 5.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "melee",
+                        "jumper",
+                        "shooter"
+                    ]
+                }
+            ]
+        },
+        {
+            "roomId": "elite",
+            "centerX": 83.0,
+            "centerY": 24.0,
+            "width": 28.0,
+            "height": 24.0,
+            "isElite": true,
+            "minEnemies": 3,
+            "maxEnemies": 3,
+            "maxCost": 9,
+            "maxWaves": 1,
+            "maxSummons": 12,
+            "points": [
+                {
+                    "pointId": "hero_entry",
+                    "x": -12.0,
+                    "y": 0.0,
+                    "clearanceRadius": 0.6000000238418579,
+                    "isHeroEntry": true,
+                    "allowedEnemyTypeIds": []
+                },
+                {
+                    "pointId": "elite_0",
+                    "x": -7.0,
+                    "y": 4.0,
+                    "clearanceRadius": 1.0,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "elite_slime_grenadier",
+                        "elite_shield_shotgun",
+                        "elite_teleport_nurse"
+                    ]
+                },
+                {
+                    "pointId": "elite_1",
+                    "x": 0.0,
+                    "y": 4.0,
+                    "clearanceRadius": 1.0,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "elite_slime_grenadier",
+                        "elite_shield_shotgun",
+                        "elite_teleport_nurse"
+                    ]
+                },
+                {
+                    "pointId": "elite_2",
+                    "x": 7.0,
+                    "y": 4.0,
+                    "clearanceRadius": 1.0,
+                    "isHeroEntry": false,
+                    "allowedEnemyTypeIds": [
+                        "elite_slime_grenadier",
+                        "elite_shield_shotgun",
+                        "elite_teleport_nurse"
+                    ]
+                }
+            ]
+        }
+    ],
+    "corridors": [
+        {
+            "x": 7,
+            "y": -2,
+            "width": 6,
+            "height": 4
+        },
+        {
+            "x": 21,
+            "y": 8,
+            "width": 4,
+            "height": 8
+        },
+        {
+            "x": 33,
+            "y": 22,
+            "width": 8,
+            "height": 4
+        },
+        {
+            "x": 61,
+            "y": 22,
+            "width": 8,
+            "height": 4
+        }
+    ],
+    "certifiedSummonPoints": [
+        {
+            "x": 77.5,
+            "y": 28.0
+        },
+        {
+            "x": 77.06066131591797,
+            "y": 29.060659408569337
+        },
+        {
+            "x": 76.0,
+            "y": 29.5
+        },
+        {
+            "x": 74.93933868408203,
+            "y": 29.060659408569337
+        },
+        {
+            "x": 74.5,
+            "y": 28.0
+        },
+        {
+            "x": 74.93933868408203,
+            "y": 26.93933868408203
+        },
+        {
+            "x": 76.0,
+            "y": 26.5
+        },
+        {
+            "x": 77.06066131591797,
+            "y": 26.939340591430665
+        },
+        {
+            "x": 84.5,
+            "y": 28.0
+        },
+        {
+            "x": 84.06066131591797,
+            "y": 29.060659408569337
+        },
+        {
+            "x": 83.0,
+            "y": 29.5
+        },
+        {
+            "x": 81.93933868408203,
+            "y": 29.060659408569337
+        },
+        {
+            "x": 81.5,
+            "y": 28.0
+        },
+        {
+            "x": 81.93933868408203,
+            "y": 26.93933868408203
+        },
+        {
+            "x": 83.0,
+            "y": 26.5
+        },
+        {
+            "x": 84.06066131591797,
+            "y": 26.939340591430665
+        },
+        {
+            "x": 91.5,
+            "y": 28.0
+        },
+        {
+            "x": 91.06066131591797,
+            "y": 29.060659408569337
+        },
+        {
+            "x": 90.0,
+            "y": 29.5
+        },
+        {
+            "x": 88.93933868408203,
+            "y": 29.060659408569337
+        },
+        {
+            "x": 88.5,
+            "y": 28.0
+        },
+        {
+            "x": 88.93933868408203,
+            "y": 26.93933868408203
+        },
+        {
+            "x": 90.0,
+            "y": 26.5
+        },
+        {
+            "x": 91.06066131591797,
+            "y": 26.939340591430665
+        }
+    ]
+}

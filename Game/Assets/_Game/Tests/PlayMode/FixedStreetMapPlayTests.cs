@@ -204,7 +204,7 @@ namespace Game.Tests
         }
 
         [UnityTest]
-        public IEnumerator SeededHome_RejectsInvalidInputAndReplaysTheGeneratedWaves()
+        public IEnumerator SeededHome_RejectsInvalidInputAndStartsAllOrdinaryEnemiesTogether()
         {
             var home = Object.FindFirstObjectByType<HomeScreen>();
             home.FixedSeedInput.text = "abc";
@@ -227,7 +227,7 @@ namespace Game.Tests
                 if (input == "") { first = snapshot; freshSeed = plan.Seed; }
                 else if (input == null) { Assert.That(plan.Seed, Is.EqualTo(freshSeed)); Assert.That(snapshot, Is.EqualTo(first)); }
                 var screen = Object.FindFirstObjectByType<StreetMapScreen>();
-                Assert.That(screen.Rooms[1].State.Plan.Waves.Count, Is.EqualTo(2));
+                Assert.That(screen.Rooms.Take(3).All(r => r.State.Plan.Waves.Count == 1), Is.True);
                 Assert.That(Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None).OfType<IEnemyTarget>(), Is.Empty);
                 var room = screen.Rooms[0];
                 var body = screen.Player.GetComponent<Rigidbody2D>();
@@ -247,16 +247,17 @@ namespace Game.Tests
                     var secondRoom = screen.Rooms[1];
                     body.position = StreetMapLayout.Rooms[2].Center;
                     yield return Until(() => secondRoom.State.AliveCount == secondRoom.State.Plan.Waves[0].Spawns.Count);
-                    foreach (var enemy in Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
-                        .OfType<IEnemyTarget>().Where(e => !e.IsDead).Cast<MonoBehaviour>()) Kill(enemy);
-                    Assert.That(secondRoom.State.AliveCount, Is.Zero);
-                    Assert.That(secondRoom.Doors.All(d => d.IsClosed), Is.True);
-                    var nextWave = secondRoom.State.Plan.Waves[1];
-                    yield return Until(() => secondRoom.State.AliveCount == nextWave.Spawns.Count);
-                    var secondWaveActors = Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                    var actors = Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
                         .OfType<IEnemyTarget>().Where(e => !e.IsDead).Cast<MonoBehaviour>().ToArray();
-                    Assert.That(secondWaveActors.Select(a => a.name), Is.EquivalentTo(nextWave.Spawns.Select(s => s.SpawnId)));
-                    foreach (var enemy in secondWaveActors) Kill(enemy);
+                    Assert.That(actors.Length, Is.InRange(6, 8));
+                    Assert.That(secondRoom.Doors.All(d => d.IsClosed), Is.True);
+                    Assert.That(actors.Select(a => a.name),
+                        Is.EquivalentTo(secondRoom.State.Plan.Waves[0].Spawns.Select(s => s.SpawnId)));
+                    foreach (var enemy in actors.Take(actors.Length - 1)) Kill(enemy);
+                    Assert.That(secondRoom.State.AliveCount, Is.EqualTo(1));
+                    Assert.That(secondRoom.Doors.All(d => d.IsClosed), Is.True);
+                    Kill(actors.Last());
+                    Assert.That(secondRoom.State.AliveCount, Is.Zero);
                     Assert.That(secondRoom.State.Phase, Is.EqualTo(RoomPhase.Cleared));
                     Assert.That(secondRoom.Doors.All(d => !d.IsClosed), Is.True);
                 }
@@ -299,6 +300,12 @@ namespace Game.Tests
                     var room = map.Rooms[index];
                     body.position = StreetMapLayout.Rooms[index + 1].Center;
                     yield return Until(() => room.State.AliveCount > 0);
+                    if (index == 1 && (defeat || abandon))
+                    {
+                        Assert.That(room.State.AliveCount, Is.InRange(6, 8));
+                        Assert.That(room.Doors.All(d => d.IsClosed), Is.True);
+                        break;
+                    }
                     if (index == 3)
                     {
                         var elites = Object.FindObjectsByType<EliteEnemy>(FindObjectsSortMode.None);
@@ -332,11 +339,6 @@ namespace Game.Tests
                         Assert.That(Time.realtimeSinceStartup, Is.LessThan(waveDeadline), "Room stalled: " + room.RoomId);
                         foreach (var actor in Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
                             .OfType<IEnemyTarget>().Where(e => !e.IsDead).Cast<MonoBehaviour>()) Kill(actor);
-                        if (index == 1 && room.State.WaveIndex == 1 && room.State.AliveCount == 0)
-                        {
-                            Assert.That(room.Doors.All(d => d.IsClosed), Is.True);
-                            if (defeat || abandon) break;
-                        }
                         yield return null;
                     }
                     if (room.State.Phase != RoomPhase.Cleared) break;
@@ -463,9 +465,21 @@ namespace Game.Tests
             nurse.Initialize(registry, hero);
             nurse.gameObject.SetActive(true);
             yield return Until(() => statuses.Contains(nurse.ActorId, "bind_1"));
+            float hitTime = Time.time;
             Assert.That(statuses.Contains(nurse.ActorId, "syringe_poison_1"), Is.True);
-            Assert.That(hero.GetComponent<ActorMotor2D>().Permissions.CanAttack, Is.False);
+            var motor = hero.GetComponent<ActorMotor2D>();
+            Assert.That(motor.Permissions.CanMove, Is.False);
+            Assert.That(motor.Permissions.CanAttack, Is.False);
             Assert.That(Vector2.Distance(nurse.transform.position, hero.transform.position), Is.LessThanOrEqualTo(1.5f));
+            yield return Until(() => motor.Permissions.CanMove);
+            Assert.That(Time.time - hitTime, Is.InRange(.9f, 1.15f));
+            float escapeDeadline = hitTime + 3.8f;
+            while (Time.time < escapeDeadline)
+            {
+                Assert.That(motor.Permissions.CanMove && motor.Permissions.CanAttack, Is.True,
+                    "The nurse must leave a chance to escape even if the hero stays within range.");
+                yield return null;
+            }
             var hp = nurse.GetComponent<DamageReceiver>();
             var body = nurse.GetComponent<Rigidbody2D>();
             body.position = new Vector2(3f, 0);

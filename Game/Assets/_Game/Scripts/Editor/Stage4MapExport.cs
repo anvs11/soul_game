@@ -14,8 +14,8 @@ namespace Game.Editor
         [Serializable] public sealed class PointData {public string pointId;public float x,y,clearanceRadius;public bool isHeroEntry;public string[] allowedEnemyTypeIds;}
         [Serializable] public sealed class RoomData {public string roomId;public float centerX,centerY,width,height;public bool isElite;public int minEnemies,maxEnemies,maxCost,maxWaves,maxSummons;public PointData[] points;}
         [Serializable] public sealed class ExportData {public string mapId;public int mapVersion;public int geometryVersion;public float cellSize=1;public bool elitePrefabsCertified=false;public string certification="World colliders, ordinary proxy .6 and hero .45; elite proxy 1 only";public int reachableCells;public RoomData[] rooms;public RectInt[] corridors;public Vector2[] certifiedSummonPoints;}
-        public static void Export() => Write("Docs/Exports/S4_FIXED_MAP_V2.json", false);
-        public static void ExportCombat() => Write("Docs/Exports/S4_FIXED_MAP_V2_COMBAT.json", true);
+        public static void Export() => Write($"Docs/Exports/S4_FIXED_MAP_V{StreetMapCatalog.Version}.json", false);
+        public static void ExportCombat() => Write($"Docs/Exports/S4_FIXED_MAP_V{StreetMapCatalog.Version}_COMBAT.json", true);
         private static void Write(string output, bool certifyCombat)
         {
             FoundationScenes.EnsureEditorReady();

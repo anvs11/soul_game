@@ -113,7 +113,7 @@ namespace Game.AI
                 float reach = WallDistance(Body.position, direction, 5f);
                 if (HitsHero(Body.position, direction, reach, .09f, out float contact))
                 {
-                    damage += Mathf.Lerp(4f, 2f, contact / 5f);
+                    damage += Mathf.Lerp(4.5f, 2.25f, contact / 5f);
                     reach = contact;
                 }
                 DrawLine(traces[i], Body.position + direction * reach * .5f, direction, reach, .055f, Color.yellow);

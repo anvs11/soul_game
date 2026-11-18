@@ -104,6 +104,7 @@ namespace Game.Tests
         [Serializable] private sealed class Point { public string pointId;public float x,y,clearanceRadius;public bool isHeroEntry;public string[] allowedEnemyTypeIds; }
         [TestCase("S4_FIXED_MAP_V2.json", false)]
         [TestCase("S4_FIXED_MAP_V2_COMBAT.json", true)]
+        [TestCase("S4_FIXED_MAP_V3_COMBAT.json", true)]
         public void ActualExportAndUnityCatalogThousandSeedsMatchSeparately(string filename, bool verifyCombat)
         {
             var relativePath=Path.Combine("Docs", "Exports", filename);
@@ -113,6 +114,13 @@ namespace Game.Tests
             if (verifyCombat) Assert.That(data.certifiedSummonPoints.Distinct().Count(), Is.EqualTo(24));
             var map=new EncounterMap(data.mapId,data.mapVersion,data.rooms.Select(r=>new EncounterRoom(r.roomId,r.centerX,r.centerY,r.width,r.height,new RoomBudget(r.minEnemies,r.maxEnemies,r.maxCost,r.maxWaves,r.maxSummons),r.points.Select(p=>new SpawnPoint(p.pointId,p.x,p.y,p.clearanceRadius,p.allowedEnemyTypeIds,p.isHeroEntry)),r.isElite)));
             var unity=Game.StreetMap.StreetMapCatalog.Create();
+            if (data.mapVersion == 2)
+            {
+                unity = new EncounterMap(unity.MapId, 2, unity.Rooms.Select(room =>
+                    room.IsElite || room.RoomId == "entry" ? room :
+                    new EncounterRoom(room.RoomId, room.CenterX, room.CenterY, room.Width, room.Height,
+                        new RoomBudget(6, 8, 8, 2), room.Points)));
+            }
             Assert.That(data.geometryVersion,Is.EqualTo(1));Assert.That(map.MapId,Is.EqualTo(unity.MapId));Assert.That(map.MapVersion,Is.EqualTo(unity.MapVersion));
             foreach(var r in map.Rooms)
             {
@@ -132,6 +140,12 @@ namespace Game.Tests
             {
                 var a=new EncounterPlanner().Generate(new EncounterRequest(seed,1,1,map));var b=new EncounterPlanner().Generate(new EncounterRequest(seed,1,1,unity));
                 Assert.That(a.IsSuccess,Is.True,a.Diagnostic);Assert.That(b.IsSuccess,Is.True,b.Diagnostic);Assert.That(EncounterPlanValidator.ValidateStage(map,a.Plan).IsSuccess,Is.True);
+                if (data.mapVersion == 3)
+                    foreach (var room in a.Plan.Rooms.Where(room => room.RoomId.StartsWith("combat_", StringComparison.Ordinal)))
+                    {
+                        Assert.That(room.Waves.Count, Is.EqualTo(1));
+                        Assert.That(room.Waves[0].Spawns.Count, Is.InRange(6, 8));
+                    }
                 Assert.That(EncounterPlannerTests.Snapshot(a.Plan),Is.EqualTo(EncounterPlannerTests.Snapshot(b.Plan)));if(a.UsedFallback)fallback++;
             }
             Assert.That(fallback, Is.Zero);

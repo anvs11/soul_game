@@ -80,7 +80,7 @@ namespace Game.Encounters
                     if(rp.Waves.Count!=0 || room.Budget.MaxEnemies!=0)return EncounterResult.Failure("ENTRY_BUDGET: safe room required");continue;
                 }
                 if(rp.Waves.Count<1 || rp.Waves.Count>2 || rp.Waves[0].DelaySeconds!=0)return EncounterResult.Failure("STAGE_WAVES: "+room.RoomId);
-                if(room.RoomId=="combat_b" && (rp.Waves.Count!=2 || rp.Waves[1].DelaySeconds<=0))return EncounterResult.Failure("DELAYED_WAVE: combat_b");
+                if(RequiresDelayedWave(room) && (rp.Waves.Count!=2 || rp.Waves[1].DelaySeconds<=0))return EncounterResult.Failure("DELAYED_WAVE: combat_b");
                 var types=rp.Waves.SelectMany(w=>w.Spawns).Select(s=>s.EnemyTypeId).ToArray();
                 if(!room.IsElite && types.Length>=3 && types.Distinct().Count()!=3)return EncounterResult.Failure("ORDINARY_VARIETY: "+room.RoomId);
                 if(room.IsElite)
@@ -92,6 +92,7 @@ namespace Game.Encounters
             }
             return result;
         }
+        internal static bool RequiresDelayedWave(EncounterRoom room) => room.RoomId == "combat_b" && room.Budget.MaxWaves > 1;
         public static EncounterScheduleValidation ValidateSchedule(IEnumerable<EncounterMap> maps,IEnumerable<EncounterPlan> plans)
         {
             var errors=new List<string>();

@@ -6,6 +6,7 @@ namespace Game.StreetMap
 {
     public static class StreetMapCatalog
     {
+        public const int Version = 3;
         public static IEnumerable<Vector2> SummonCandidates(Vector2 origin, int slot)
         {
             for (int i = 0; i < 8; i++)
@@ -31,9 +32,9 @@ namespace Game.StreetMap
                 }
                 if(i==4)for(int p=0;p<3;p++)points.Add(new SpawnPoint("elite_"+p,-7+p*7,4,1,elites));
                 result.Add(new EncounterRoom(r.Id,r.Center.x,r.Center.y,r.Bounds.width,r.Bounds.height,
-                    i==0?new RoomBudget(0,0,0,0):i==4?new RoomBudget(3,3,9,1,12):new RoomBudget(6,8,8,2),points,i==4));
+                    i==0?new RoomBudget(0,0,0,0):i==4?new RoomBudget(3,3,9,1,12):new RoomBudget(6,8,8,1),points,i==4));
             }
-            return new EncounterMap("fixed_street_1_1",2,result);
+            return new EncounterMap("fixed_street_1_1",Version,result);
         }
         public static HashSet<Vector2Int> Reachable(float radius)
         {

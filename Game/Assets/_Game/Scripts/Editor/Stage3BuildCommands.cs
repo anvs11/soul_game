@@ -15,12 +15,17 @@ namespace Game.Editor
             "Assets/_Game/Scenes/CombatSandbox.unity", "Assets/_Game/Scenes/Stage2CombatSandbox.unity",
             "Assets/_Game/Scenes/Stage2BossSandbox.unity", "Assets/_Game/Scenes/Stage3StreetSandbox.unity" };
         [MenuItem("Game/Build/Stage 3 Windows")]
-        public static void BuildStage3Windows() => BuildStage3(BuildTarget.StandaloneWindows64, "Windows", "ZombieExpedition.exe");
+        public static void BuildStage3Windows() => BuildStreet(3, Stage3ScenePaths(), BuildTarget.StandaloneWindows64, "Windows", "ZombieExpedition.exe");
         [MenuItem("Game/Build/Stage 3 Android")]
-        public static void BuildStage3Android() => BuildStage3(BuildTarget.Android, "Android", "ZombieExpedition.apk");
+        public static void BuildStage3Android() => BuildStreet(3, Stage3ScenePaths(), BuildTarget.Android, "Android", "ZombieExpedition.apk");
         [MenuItem("Game/Build/Stage 3 Mac")]
-        public static void BuildStage3Mac() => BuildStage3(BuildTarget.StandaloneOSX, "Mac", "ZombieExpedition.app");
-        [Serializable] private sealed class Stage3Manifest
+        public static void BuildStage3Mac() => BuildStreet(3, Stage3ScenePaths(), BuildTarget.StandaloneOSX, "Mac", "ZombieExpedition.app");
+        public static string[] Stage4ScenePaths() => Stage3ScenePaths().Append(Stage4MapAssets.ScenePath).ToArray();
+        [MenuItem("Game/Build/Stage 4 Windows")]
+        public static void BuildStage4Windows() => BuildStreet(4, Stage4ScenePaths(), BuildTarget.StandaloneWindows64, "Windows", "ZombieExpedition.exe");
+        [MenuItem("Game/Build/Stage 4 Android")]
+        public static void BuildStage4Android() => BuildStreet(4, Stage4ScenePaths(), BuildTarget.Android, "Android", "ZombieExpedition.apk");
+        [Serializable] private sealed class StreetBuildManifest
         {
             public string buildId, platform, result, editor, executable, buildGuid;
             public string[] scenes, packedScenes, messages;
@@ -28,15 +33,15 @@ namespace Game.Editor
             public double durationSeconds;
             public ulong sizeBytes;
         }
-        private static void BuildStage3(BuildTarget target, string platform, string executable)
+        private static void BuildStreet(int stage, string[] scenes, BuildTarget target, string platform, string executable)
         {
-            string id = "s3-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0,8);
-            string folder = Path.Combine(Directory.GetParent(Application.dataPath).FullName,"Builds","Stage3",platform,id);
+            string id = $"s{stage}-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0,8);
+            string folder = Path.Combine(Directory.GetParent(Application.dataPath).FullName,"Builds",$"Stage{stage}",platform,id);
             if (Directory.Exists(folder)) throw new BuildFailedException("Build directory collision.");
             Directory.CreateDirectory(folder);
             string path = Path.Combine(folder,"build-report.json");
-            var data = new Stage3Manifest { buildId=id, platform=platform, result="Preflight", editor=Application.unityVersion,
-                executable=executable, scenes=Stage3ScenePaths(), packedScenes=Array.Empty<string>(), messages=Array.Empty<string>() };
+            var data = new StreetBuildManifest { buildId=id, platform=platform, result="Preflight", editor=Application.unityVersion,
+                executable=executable, scenes=scenes, packedScenes=Array.Empty<string>(), messages=Array.Empty<string>() };
             try
             {
                 FoundationScenes.EnsureEditorReady();
@@ -58,7 +63,7 @@ namespace Game.Editor
                 File.WriteAllText(path,JsonUtility.ToJson(data,true));
                 if(report.summary.result!=BuildResult.Succeeded || data.errors!=0) throw new BuildFailedException("BuildReport not successful: "+path);
                 if(!File.Exists(Path.Combine(folder,executable)) && !Directory.Exists(Path.Combine(folder,executable))) throw new BuildFailedException("Player output missing.");
-                Debug.Log("STAGE3_BUILD_OK "+path);
+                Debug.Log($"STAGE{stage}_BUILD_OK " + path);
             }
             catch(Exception e)
             {

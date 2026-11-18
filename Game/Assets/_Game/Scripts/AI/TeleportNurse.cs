@@ -6,8 +6,10 @@ namespace Game.AI
 {
     public sealed class TeleportNurse : EliteEnemy
     {
-        private enum Phase { Patrol, Aim, Shot, Combo, Slime }
+        private enum Phase { Patrol, Aim, Shot, Combo, Recover, Slime }
         private static readonly Color Pink = new Color(1f, .28f, .65f);
+        private const float BindDuration = 1f;
+        private const float ComboRecovery = 2.5f;
         private Phase phase;
         private float timer = .6f, scratch, range, mistTime;
         private Vector2 bolt, heading;
@@ -48,12 +50,21 @@ namespace Game.AI
                     TickShot(dt);
                     break;
                 case Phase.Combo:
-                    if (timer <= 0) { BeginPatrol(); break; }
+                    if (timer <= 0)
+                    {
+                        phase = Phase.Recover;
+                        timer = ComboRecovery;
+                        Skin.color = normal;
+                        break;
+                    }
                     if ((scratch -= dt) <= 0)
                     {
                         scratch += .5f;
                         if (HeroWithin(Body.position, 1.5f)) HurtHero(4);
                     }
+                    break;
+                case Phase.Recover:
+                    if (timer <= 0) phase = Phase.Patrol;
                     break;
                 default:
                     if (ToHero.magnitude > 3.8f) Travel(ToHero.normalized, 2.7f * dt, dt);
@@ -94,7 +105,7 @@ namespace Game.AI
             ShowMarker(marker, bolt, new Vector2(.38f, .26f), Pink);
             if (!direct && range > .001f && step + .001f >= requested) return;
             marker.enabled = false;
-            if (direct) Apply("bind_" + ++attack, ActorStatusKind.Bind, 3f);
+            if (direct) Apply("bind_" + ++attack, ActorStatusKind.Bind, BindDuration);
             TeleportNear(direct ? HeroPosition : bolt, direct);
             if (HeroWithin(Body.position, 1.5f))
             {

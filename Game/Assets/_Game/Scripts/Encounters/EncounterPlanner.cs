@@ -115,8 +115,9 @@ namespace Game.Encounters
                 int min=Math.Max(1,room.Budget.MinEnemies),max=Math.Min(room.Budget.MaxEnemies,room.Budget.MaxCost);
                 if(max<min || room.Budget.MaxWaves<1)return null;
                 count=fallback?min:min+random.Below(max-min+1);
-                if(room.RoomId=="combat_b" && (count<2 || room.Budget.MaxWaves<2))return null;
-                waves=count>=2 && room.Budget.MaxWaves>=2 && (room.RoomId=="combat_b" || (!fallback && random.Below(2)==0))?2:1;
+                bool delayed = EncounterPlanValidator.RequiresDelayedWave(room);
+                if(delayed && count<2)return null;
+                waves=count>=2 && room.Budget.MaxWaves>=2 && (delayed || (!fallback && random.Below(2)==0))?2:1;
                 var bank=(string[])Ordinary.Clone();if(!fallback)random.Shuffle(bank);types=new string[count];for(int i=0;i<count;i++)types[i]=bank[i%3];
             }
             int capacity=room.Points.Count(p=>!p.IsHeroEntry);

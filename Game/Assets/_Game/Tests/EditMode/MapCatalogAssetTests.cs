@@ -25,7 +25,7 @@ namespace Game.Tests
         }
         [Test]public void ExpandedCatalog_UsesAllOrdinaryTypesAndKeepsHeroEntrySeparate()
         {
-            var map=StreetMapCatalog.Create();Assert.That(map.MapVersion,Is.EqualTo(2));
+            var map=StreetMapCatalog.Create();Assert.That(map.MapVersion,Is.EqualTo(3));
             for(int i=1;i<4;i++)
             {Assert.That(map.Rooms[i].Budget.MinEnemies,Is.EqualTo(6));Assert.That(map.Rooms[i].Budget.MaxEnemies,Is.EqualTo(8));foreach(var point in map.Rooms[i].Points)Assert.That(point.AllowedEnemyTypeIds.Count,Is.EqualTo(point.IsHeroEntry?0:3));}
         }
