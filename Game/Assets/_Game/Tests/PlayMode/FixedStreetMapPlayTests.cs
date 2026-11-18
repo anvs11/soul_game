@@ -12,6 +12,8 @@ using Game.UI;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -24,6 +26,19 @@ namespace Game.Tests
     {
         public Vector2 Move;
         public PlayerCommand ReadCommand() => new PlayerCommand(Move);
+    }
+    // The batch Editor can route automatic events away from the unfocused Game View.
+    [DefaultExecutionOrder(-1000)]
+    public sealed class MapTestInputPump : MonoBehaviour
+    {
+        public Action ApplyState;
+        private void Update()
+        {
+            InputSystem.Update();
+            var apply = ApplyState;
+            ApplyState = null;
+            apply?.Invoke();
+        }
     }
     public sealed class FixedStreetMapPlayTests
     {
@@ -65,6 +80,127 @@ namespace Game.Tests
             Assert.That(Object.FindObjectsByType<GameBootstrap>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
             Assert.That(Object.FindObjectsByType<EventSystem>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
             Assert.That(Object.FindObjectsByType<InputSystemUIInputModule>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator DodgeKeyboardAndGamepad_UseOnePressAndRespectTheWall()
+        {
+            yield return StartMap();
+            var screen = Object.FindFirstObjectByType<StreetMapScreen>();
+            var hero = screen.Player;
+            var dodge = hero.GetComponent<PlayerDodgeController>();
+            var body = hero.GetComponent<Rigidbody2D>();
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var pad = InputSystem.AddDevice<Gamepad>();
+            var updateMode = InputSystem.settings.updateMode;
+            var background = InputSystem.settings.backgroundBehavior;
+            var editorInput = InputSystem.settings.editorInputBehaviorInPlayMode;
+            InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            InputSystem.settings.updateMode = InputSettings.UpdateMode.ProcessEventsManually;
+            InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            var pump = screen.gameObject.AddComponent<MapTestInputPump>();
+            try
+            {
+                hero.GetComponent<LocalInputSource>().SendMessage("OnApplicationFocus", true);
+                hero.GetComponent<LocalInputSource>().SendMessage("OnApplicationPause", false);
+                if (screen.IsPaused) screen.Resume();
+                yield return null;
+                // No keyboard window is present in Windows batch. Change the test device
+                // after its update so the same real action map samples it before the motor.
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.D, Key.LeftShift));
+                yield return null;
+                yield return null;
+                var sampled = hero.GetComponent<LocalInputSource>().ReadCommand();
+                Assert.That(dodge.CooldownRemaining, Is.Positive,
+                    $"Shift did not start a dodge. Key={keyboard.leftShiftKey.isPressed}, D={keyboard.dKey.isPressed}, move={sampled.Move}, paused={screen.IsPaused}, pos={body.position}, direction={dodge.Direction}");
+                Assert.That(dodge.Direction, Is.EqualTo(Vector2.right));
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.LeftShift));
+                yield return new WaitForSeconds(PlayerDodgeController.Cooldown + .15f);
+                Assert.That(dodge.IsDodging, Is.False);
+                Assert.That(dodge.CooldownRemaining, Is.Zero, "Holding Shift must not repeat after cooldown.");
+                Assert.That(body.position.x, Is.EqualTo(2.4f).Within(.25f));
+
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                body.position = new Vector2(-6.1f, 0);
+                Physics2D.SyncTransforms();
+                yield return null;
+                InputSystem.QueueStateEvent(pad, new GamepadState { leftStick = Vector2.left }.WithButton(GamepadButton.RightShoulder));
+                yield return Until(() => dodge.IsDodging, "Right bumper did not start a dodge toward the wall.");
+                Assert.That(dodge.Direction, Is.EqualTo(Vector2.left));
+                InputSystem.QueueStateEvent(pad, new GamepadState());
+                yield return Until(() => !dodge.IsDodging);
+                Assert.That(body.position.x, Is.InRange(-6.60f, -6.3f));
+                Assert.That(dodge.CooldownRemaining, Is.Positive);
+            }
+            finally
+            {
+                pump.enabled = false;
+                InputSystem.RemoveDevice(keyboard);
+                InputSystem.RemoveDevice(pad);
+                InputSystem.settings.updateMode = updateMode;
+                InputSystem.settings.backgroundBehavior = background;
+                InputSystem.settings.editorInputBehaviorInPlayMode = editorInput;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator DodgeScreenButton_UsesSecondPointerClearsOnFocusAndKeepsPauseMenuSafe()
+        {
+            yield return StartMap();
+            var screen = Object.FindFirstObjectByType<StreetMapScreen>();
+            var controls = screen.GetComponent<BattleControls>();
+            var hero = screen.Player;
+            var dodge = hero.GetComponent<PlayerDodgeController>();
+            var input = hero.GetComponent<LocalInputSource>();
+            input.SendMessage("OnApplicationFocus", true);
+            input.SendMessage("OnApplicationPause", false);
+            if (screen.IsPaused) screen.Resume();
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+            var center = RectTransformUtility.WorldToScreenPoint(null, controls.Stick.transform.position);
+            var movePointer = new PointerEventData(EventSystem.current) { pointerId = 1, position = center };
+            var dodgePointer = new PointerEventData(EventSystem.current) { pointerId = 2 };
+            controls.Stick.OnPointerDown(movePointer);
+            movePointer.position += Vector2.right * 90;
+            controls.Stick.OnDrag(movePointer);
+            yield return null;
+            yield return null;
+            Assert.That(input.ReadCommand().Move.x, Is.GreaterThan(.1f), $"Virtual stick was not processed. Paused={screen.IsPaused}");
+            controls.Dodge.OnPointerDown(dodgePointer);
+            yield return Until(() => dodge.IsDodging);
+            Assert.That(dodge.Direction.x, Is.GreaterThan(.95f));
+            var safe = (RectTransform)screen.transform.Find("BattleControlsCanvas/SafeArea");
+            Assert.That(controls.Dodge.transform.IsChildOf(safe), Is.True);
+            Assert.That(safe.anchorMax.y, Is.EqualTo(Screen.safeArea.yMax / Screen.height).Within(.001f));
+            Assert.That(screen.MiniMap.isActiveAndEnabled, Is.True);
+
+            screen.gameObject.SendMessage("OnApplicationFocus", false);
+            input.SendMessage("OnApplicationFocus", false);
+            Assert.That(screen.IsPaused, Is.True);
+            EventSystem.current.SetSelectedGameObject(controls.HomeButton.gameObject);
+            var pad = InputSystem.AddDevice<Gamepad>();
+            try
+            {
+                InputSystem.QueueStateEvent(pad, new GamepadState().WithButton(GamepadButton.South));
+                yield return null;
+                yield return null;
+                Assert.That(screen.IsPaused, Is.True);
+                Assert.That(boot.Coordinator.Phase, Is.EqualTo(RunPhase.InArena));
+            }
+            finally { InputSystem.RemoveDevice(pad); }
+            input.SendMessage("OnApplicationFocus", true);
+            screen.Resume();
+            yield return new WaitForSeconds(PlayerDodgeController.Cooldown + .15f);
+            Assert.That(input.ReadCommand().Move.sqrMagnitude, Is.LessThan(.001f));
+            Assert.That(dodge.CooldownRemaining, Is.Zero);
+            controls.Dodge.OnPointerDown(dodgePointer);
+            yield return Until(() => dodge.IsDodging);
+            screen.Leave();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
+            yield return StartMap();
+            var fresh = Object.FindFirstObjectByType<StreetMapScreen>().Player.GetComponent<PlayerDodgeController>();
+            Assert.That(fresh.CooldownRemaining, Is.Zero);
+            Assert.That(fresh.IsDodging, Is.False);
         }
 
         [UnityTest]
@@ -227,12 +363,12 @@ namespace Game.Tests
             Assert.That(boot.Coordinator.LastOutcome, Is.EqualTo(RunOutcome.Defeat));
             Assert.That(Object.FindFirstObjectByType<StreetMapScreen>(), Is.Null);
         }
-        private static IEnumerator Until(Func<bool> condition)
+        private static IEnumerator Until(Func<bool> condition, string failure = "Scene flow timed out.")
         {
             float deadline = Time.realtimeSinceStartup + 20;
             while (!condition())
             {
-                Assert.That(Time.realtimeSinceStartup, Is.LessThan(deadline), "Scene flow timed out.");
+                Assert.That(Time.realtimeSinceStartup, Is.LessThan(deadline), failure);
                 yield return null;
             }
         }

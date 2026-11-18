@@ -49,6 +49,15 @@
           "processors": "",
           "interactions": "",
           "initialStateCheck": false
+        },
+        {
+          "name": "Dodge",
+          "type": "Button",
+          "id": "0d35b295-80eb-45df-b597-9f59f21691a6",
+          "expectedControlType": "Button",
+          "processors": "",
+          "interactions": "",
+          "initialStateCheck": false
         }
       ],
       "bindings": [
@@ -258,6 +267,28 @@
           "processors": "",
           "groups": "",
           "action": "Pause",
+          "isComposite": false,
+          "isPartOfComposite": false
+        },
+        {
+          "name": "",
+          "id": "2b9a30f1-ac94-423f-9001-3a30aba1908b",
+          "path": "<Keyboard>/leftShift",
+          "interactions": "",
+          "processors": "",
+          "groups": "",
+          "action": "Dodge",
+          "isComposite": false,
+          "isPartOfComposite": false
+        },
+        {
+          "name": "",
+          "id": "eceacf6e-996c-4244-850b-373dc7c7a814",
+          "path": "<Gamepad>/rightShoulder",
+          "interactions": "",
+          "processors": "",
+          "groups": "",
+          "action": "Dodge",
           "isComposite": false,
           "isPartOfComposite": false
         }

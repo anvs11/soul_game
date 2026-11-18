@@ -13,10 +13,11 @@ namespace Game.UI
         private Action pause, resume, leave;
         public OnScreenStick Stick { get; private set; }
         public OnScreenButton Attack { get; private set; }
+        public OnScreenButton Dodge { get; private set; }
         public OnScreenButton PauseControl { get; private set; }
         public Button ResumeButton { get; private set; }
         public Button HomeButton { get; private set; }
-        public void Initialize(Action pauseAction, Action resumeAction, Action leaveAction)
+        public void Initialize(Action pauseAction, Action resumeAction, Action leaveAction, bool enableDodge = false)
         {
             pause=pauseAction; resume=resumeAction; leave=leaveAction;
             if(safe!=null)return;
@@ -32,6 +33,9 @@ namespace Game.UI
             var handle=Box("Stick",baseRect,new Vector2(.5f,.5f),Vector2.zero,new Vector2(100,100),new Color(.3f,.6f,.5f,.8f));
             Stick=handle.gameObject.AddComponent<OnScreenStick>(); Stick.controlPath="<Gamepad>/leftStick"; Stick.movementRange=55;
             Attack=Control("Огонь",new Vector2(1,0),new Vector2(-100,120),new Vector2(120,120),"<Gamepad>/buttonSouth");
+            if (enableDodge)
+                Dodge = Control("Кувырок", new Vector2(1, 0), new Vector2(-100, 237),
+                    new Vector2(120, 80), "<Gamepad>/rightShoulder");
             Control("Оружие",new Vector2(1,0),new Vector2(-245,190),new Vector2(110,80),"<Gamepad>/buttonNorth");
             Control("Взять / E",new Vector2(1,0),new Vector2(-245,80),new Vector2(110,80),"<Gamepad>/buttonWest");
             PauseControl=Control("Пауза",new Vector2(1,1),new Vector2(-65,-45),new Vector2(100,60),"<Gamepad>/start");

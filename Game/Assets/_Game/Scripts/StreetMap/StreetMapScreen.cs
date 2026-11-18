@@ -55,6 +55,8 @@ namespace Game.StreetMap
             visited[0] = true;
             CurrentRoomId = "entry";
             heroCollider = player.GetComponent<Collider2D>();
+            if (player.GetComponent<PlayerDodgeController>() == null)
+                player.gameObject.AddComponent<PlayerDodgeController>();
             player.SetControlsEnabled(false);
             player.GetComponent<AutoAimSelector>().Configure(registry);
             for (int i = 0; i < enemies.Length; i++)
@@ -67,7 +69,7 @@ namespace Game.StreetMap
             var portal=new GameObject("FinalPortal");portal.transform.SetParent(transform,false);
             Portal=portal.AddComponent<FixedMapPortal>();Portal.Initialize(player.GetComponent<SpriteRenderer>().sprite);
             controls = GetComponent<BattleControls>() ?? gameObject.AddComponent<BattleControls>();
-            controls.Initialize(TogglePause, Resume, Leave);
+            controls.Initialize(TogglePause, Resume, Leave, enableDodge: true);
             if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = false;
             player.Died += OnPlayerDied;
             player.PauseRequested += TogglePause;
@@ -75,7 +77,7 @@ namespace Game.StreetMap
             run.Changed += OnPhaseChanged;
             hud.Bind(player);
             string seed = value.CurrentRequest.FixedEncounter == null ? "Тестовый маршрут" : "Seed " + value.CurrentRequest.Seed;
-            hud.SetHint("1-1 · " + seed + " · WASD / Space / Q · E: портал · Esc: пауза\nВ финальной комнате проверочный бой.");
+            hud.SetHint("1-1 · " + seed + " · WASD / Space / Q · Shift: кувырок · E: портал · Esc: пауза\nВ финальной комнате проверочный бой.");
             UpdateRoomLabel();
             OnPhaseChanged();
         }

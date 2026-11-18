@@ -10,8 +10,9 @@ namespace Game.Input
         [SerializeField] private InputActionAsset actions;
         private InputActionAsset ownedActions;
         private InputActionMap map;
-        private InputAction move, attack, switchWeapon, interact, pause;
+        private InputAction move, attack, switchWeapon, interact, pause, dodge;
         private int sampledFrame = -1;
+        private int inputResetFrame = -1;
         private PlayerCommand command;
         private bool focused = true;
         private bool suspended;
@@ -32,6 +33,7 @@ namespace Game.Input
             switchWeapon = map.FindAction("SwitchWeapon", true);
             interact = map.FindAction("Interact", true);
             pause = map.FindAction("Pause", true);
+            dodge = map.FindAction("Dodge");
             sampledFrame = -1;
             RefreshEnabled();
         }
@@ -49,7 +51,8 @@ namespace Game.Input
             if (sampledFrame == Time.frameCount) return command;
             sampledFrame = Time.frameCount;
             command = new PlayerCommand(move.ReadValue<Vector2>(), attack.IsPressed(),
-                switchWeapon.WasPressedThisFrame(), interact.WasPressedThisFrame(), pause.WasPressedThisFrame());
+                switchWeapon.WasPressedThisFrame(), interact.WasPressedThisFrame(), pause.WasPressedThisFrame(),
+                dodgePressed: sampledFrame != inputResetFrame && dodge != null && dodge.WasPressedThisFrame());
             return command;
         }
 
@@ -61,6 +64,7 @@ namespace Game.Input
             map.Disable();
             command = default;
             sampledFrame = -1;
+            inputResetFrame = Time.frameCount;
             if (focused && !suspended && isActiveAndEnabled) map.Enable();
         }
 
