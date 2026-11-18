@@ -25,7 +25,7 @@ namespace Game.Editor
             var asset = ScriptableObject.CreateInstance<Stage4CombatAssets>();
             asset.Configure(
                 Actor<SlimeGrenadier>(names[0], 200, .60f, new Color(.38f, .82f, .14f), sprite, projectile),
-                Actor<ShieldShotgun>(names[1], 300, .70f, new Color(.22f, .44f, .72f), sprite, projectile),
+                Actor<ShieldShotgun>(names[1], 200, .70f, new Color(.22f, .44f, .72f), sprite, projectile),
                 Actor<TeleportNurse>(names[2], 120, .42f, new Color(.85f, .24f, .61f), sprite, projectile),
                 Actor<MiniSlime>(names[3], 12, .25f, new Color(.58f, 1f, .2f), sprite, projectile),
                 Pickup(names[4], PickupKind.Ammo, 6, "AMMO", new Color(.9f, .68f, .2f), sprite),

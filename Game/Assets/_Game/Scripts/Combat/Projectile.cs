@@ -47,7 +47,10 @@ namespace Game.Combat
                 // Disable the hit path before damage can invoke arbitrary scene callbacks.
                 active = false;
                 var receiver = closest.collider.GetComponentInParent<DamageReceiver>();
-                try { if (receiver != null) receiver.ApplyDamage(request.Damage); }
+                var damage = request.Damage;
+                var impact = new DamagePacket(damage.SourceActorId, damage.Amount, damage.DamageType,
+                    damage.AttackId, damage.ProtectionSecondsOverride, closest.normal);
+                try { if (receiver != null) receiver.ApplyDamage(in impact); }
                 finally { Despawn(); }
                 return;
             }

@@ -51,7 +51,8 @@ namespace Game.Actors
         {
             if (!isActiveAndEnabled || !CanReceiveHits || Time.timeAsDouble < protectedUntil) return default;
             var adjusted = adjustment == null ? packet : new DamagePacket(packet.SourceActorId,
-                adjustment.AdjustDamage(in packet), packet.DamageType, packet.AttackId, packet.ProtectionSecondsOverride);
+                adjustment.AdjustDamage(in packet), packet.DamageType, packet.AttackId, packet.ProtectionSecondsOverride,
+                packet.ProjectileHitNormal);
             var result = State.ApplyDamage(in adjusted);
             if (!result.Applied) return result;
             protectedUntil = Time.timeAsDouble + (packet.ProtectionSecondsOverride ?? protectionSeconds);

@@ -28,6 +28,8 @@ namespace Game.AI
         public override float AdjustDamage(in DamagePacket packet)
         {
             float damage = base.AdjustDamage(in packet);
+            if (packet.ProjectileHitNormal is Vector2 normal)
+                return Vector2.Dot(facing, normal) > 0 ? 0f : damage;
             return HeroId != 0 && packet.SourceActorId == HeroId && Vector2.Dot(facing, ToHero) > 0 ? damage * .35f : damage;
         }
         protected override void BeginSpecial()

@@ -428,7 +428,7 @@ namespace Game.Tests
         }
 
         [UnityTest]
-        public IEnumerator Shield_FrontReducesKnownHeroDamageAndBackCrossesThresholdOnce()
+        public IEnumerator Shield_BlocksFrontProjectilesAndTriggersRamAt100Health()
         {
             yield return StartMap();
             var hero = Object.FindFirstObjectByType<StreetMapScreen>().Player;
@@ -439,11 +439,24 @@ namespace Game.Tests
             guard.gameObject.SetActive(true);
             var hp = guard.GetComponent<DamageReceiver>();
             int attacker = hero.GetComponent<ActorIdentity>().ActorId;
-            Apply(hp, 100, attacker);
-            Assert.That(hp.Health, Is.EqualTo(265f));
+            var pool = hero.GetComponent<ProjectilePool>();
+            int enemyLayer = 1 << guard.gameObject.layer;
+            var front = new ProjectileSpawnRequest(new Vector2(1.5f, 0), Vector2.right, 30f, 1f,
+                .1f, enemyLayer, attacker, CombatFaction.Player, new DamagePacket(attacker, 100));
+            var rear = new ProjectileSpawnRequest(new Vector2(4.5f, 0), Vector2.left, 30f, 1f,
+                .1f, enemyLayer, attacker, CombatFaction.Player,
+                new DamagePacket(attacker, 25, protectionSecondsOverride: 0));
+            Assert.That(hp.MaxHealth, Is.EqualTo(200f));
+            Assert.That(pool.TrySpawn(in front), Is.True);
+            yield return Until(() => pool.ActiveCount == 0);
+            Assert.That(hp.Health, Is.EqualTo(200f));
+            Assert.That(guard.SpecialUsed, Is.False);
+            Assert.That(pool.TrySpawn(in rear), Is.True);
+            yield return Until(() => pool.ActiveCount == 0);
+            Assert.That(hp.Health, Is.EqualTo(175f), "The shot comes from behind while the hero stays in front.");
             hero.transform.position = new Vector2(5, 0);
             Physics2D.SyncTransforms();
-            Apply(hp, 165, attacker);
+            Apply(hp, 75, attacker);
             Assert.That(hp.Health, Is.EqualTo(100f));
             CreateTestWall(new Vector2(4, 0));
             yield return Until(() => guard.SpecialUsed);
@@ -473,13 +486,15 @@ namespace Game.Tests
             Assert.That(Vector2.Distance(nurse.transform.position, hero.transform.position), Is.LessThanOrEqualTo(1.5f));
             yield return Until(() => motor.Permissions.CanMove);
             Assert.That(Time.time - hitTime, Is.InRange(.9f, 1.15f));
-            float escapeDeadline = hitTime + 3.8f;
+            float escapeDeadline = hitTime + 3.1f;
             while (Time.time < escapeDeadline)
             {
                 Assert.That(motor.Permissions.CanMove && motor.Permissions.CanAttack, Is.True,
                     "The nurse must leave a chance to escape even if the hero stays within range.");
                 yield return null;
             }
+            yield return Until(() => statuses.Contains(nurse.ActorId, "bind_2"));
+            Assert.That(Time.time - hitTime, Is.InRange(3.2f, 4f));
             var hp = nurse.GetComponent<DamageReceiver>();
             var body = nurse.GetComponent<Rigidbody2D>();
             body.position = new Vector2(3f, 0);

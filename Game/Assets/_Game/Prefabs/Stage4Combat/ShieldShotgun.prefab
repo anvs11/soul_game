@@ -121,7 +121,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 27cfd060a60148d1b076ed9161f28a99, type: 3}
   m_Name:
   m_EditorClassIdentifier: Game.Runtime::Game.Actors.DamageReceiver
-  initialHealth: 300
+  initialHealth: 200
   initialArmor: 0
   protectionSeconds: 0.12
 --- !u!58 &4236233278973772258

@@ -9,7 +9,7 @@ namespace Game.AI
         private enum Phase { Patrol, Aim, Shot, Combo, Recover, Slime }
         private static readonly Color Pink = new Color(1f, .28f, .65f);
         private const float BindDuration = 1f;
-        private const float ComboRecovery = 2.5f;
+        private const float ComboRecovery = 1.7f;
         private Phase phase;
         private float timer = .6f, scratch, range, mistTime;
         private Vector2 bolt, heading;
