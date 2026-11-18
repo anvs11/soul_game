@@ -9,15 +9,17 @@ namespace Game.Input
         public bool SwitchPressed { get; }
         public bool InteractPressed { get; }
         public bool PausePressed { get; }
+        public bool DodgePressed { get; }
 
         public PlayerCommand(Vector2 move, bool attackHeld = false, bool switchPressed = false,
-            bool interactPressed = false, bool pausePressed = false)
+            bool interactPressed = false, bool pausePressed = false, bool dodgePressed = false)
         {
             Move = Vector2.ClampMagnitude(move, 1f);
             AttackHeld = attackHeld;
             SwitchPressed = switchPressed;
             InteractPressed = interactPressed;
             PausePressed = pausePressed;
+            DodgePressed = dodgePressed;
         }
     }
 

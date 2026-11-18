@@ -42,10 +42,14 @@ namespace Game.Tests
             Assert.That(enemy.GetComponent<DamageReceiver>().Health,Is.EqualTo(950));Assert.That(far.GetComponent<DamageReceiver>().Health,Is.EqualTo(1000));
             yield return new WaitForSeconds(.3f);Assert.That(enemy.transform.position.x,Is.LessThan(origin.x-3));
             Assert.That(motor.StunRemaining,Is.GreaterThan(1.5f));Assert.That(hero.GetComponent<StunStars>().Visible,Is.True);
-            var position=hero.transform.position;input.Command=new Game.Input.PlayerCommand(Vector2.up);
+            // S4-01: legacy barrel stun now blocks attacks as well as movement; it is not root.
+            var weapon=hero.GetComponent<WeaponController>();int ammo=weapon.State.Magazine;
+            var position=hero.transform.position;input.Command=new Game.Input.PlayerCommand(Vector2.up,attackHeld:true);
             Time.timeScale=0;float remaining=motor.StunRemaining;yield return new WaitForSecondsRealtime(.15f);Assert.That(motor.StunRemaining,Is.EqualTo(remaining));Time.timeScale=1;
             yield return new WaitForSeconds(.3f);Assert.That(Vector2.Distance(position,hero.transform.position),Is.LessThan(.03f));
+            Assert.That(weapon.State.Magazine,Is.EqualTo(ammo),"Stun must prevent spending ammunition on attacks.");
             yield return new WaitForSeconds(1.6f);Assert.That(motor.StunRemaining,Is.Zero);Assert.That(hero.GetComponent<StunStars>().Visible,Is.False);
+            yield return new WaitForSeconds(.3f);Assert.That(weapon.State.Magazine,Is.LessThan(ammo),"Attack resumes after stun expires.");
         }
         [UnityTest] public IEnumerator WallBlocksBlastAndStunDiesWithHero()
         {
