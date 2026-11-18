@@ -51,7 +51,8 @@ namespace Game.Combat
             int beforeMagazine = State.Magazine, beforeReserve = State.ReserveAmmo;
             bool beforeReload = State.IsReloading, beforeSelected = State.Selected;
 
-            if (command.SwitchPressed) State.SetSelected(!State.Selected);
+            var permissions = motor.Permissions;
+            if (command.SwitchPressed && permissions.CanSwitchWeapon) State.SetSelected(!State.Selected);
             State.Advance(Time.deltaTime, command.AttackHeld);
             var target = selector.Select(transform.position, State.IsMelee ? MeleeAttack.Radius : definition.TargetRange, identity.ActorId);
             if (target != null)
@@ -60,14 +61,14 @@ namespace Game.Combat
                 if (offset.sqrMagnitude > .0001f) { aim = offset.normalized; }
             }
             else if (command.Move.sqrMagnitude > .0001f) aim = command.Move.normalized;
-            if (command.AttackHeld && State.Selected)
+            if (permissions.CanAttack && command.AttackHeld && State.Selected)
             {
                 var request = new ProjectileSpawnRequest(transform.position, aim, definition.ProjectileSpeed,
                     definition.ProjectileLifetime, definition.ProjectileRadius, hitMask, identity.ActorId, identity.Faction,
                     new DamagePacket(identity.ActorId, definition.Damage, attackId: ++attackId));
                 State.TryFire((IProjectileSpawner)projectileSpawner, in request);
             }
-            else if (command.AttackHeld && State.IsMelee)
+            else if (permissions.CanAttack && command.AttackHeld && State.IsMelee)
             {
                 melee.TryAttack(State, transform.position, aim, identity.ActorId, identity.Faction, hitMask, ++attackId);
             }

@@ -57,6 +57,7 @@ namespace Game.Actors
                 throw new InvalidOperationException("Encounter transfer maxima differ from the destination actor.");
             receiver.RestoreForEncounter(snapshot.Health, snapshot.Armor);
             weapon.State.RestoreForEncounter(snapshot.Magazine, snapshot.ReserveAmmo, snapshot.Stamina, snapshot.IsMelee);
+            motor.ResetForEncounter();
             PublishState();
         }
         public void SetControlsEnabled(bool enabled)
