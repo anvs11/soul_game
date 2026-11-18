@@ -1,3 +1,9 @@
+# S4-05A1–A3 / S4-05B — передача для S4-06B, 19 ноября 2026
+
+По договорённости с У1 боевая реализация и подборы добавлены к `feat/stage4-map`. Гранатомётчик, щитоносец и медсестра имеют отдельные prefab, конечные эффекты и сценарии тренировочной сцены. API `IRunResourceSink`, параметры и результаты записаны в `Game/Docs/S4_05_COMBAT_RESOURCES_HANDOFF.md`. Для независимого ревью связки на 1-1 доступны `Game/Docs/S4_06_RUNTIME_HANDOFF.md` и `Game/Docs/Exports/S4_FIXED_MAP_V2_COMBAT.json`. Windows Unity прошёл 147/147 EditMode и 129/129 PlayMode. Ручная оценка боя и проверка Android открыты.
+
+---
+
 # S4-01 — 18 ноября 2026
 
 По прямому поручению пользователя первый шаг У 1 выполнен в его Windows-клоне исполнителем У 2 перед S4-04A. Ветка feat/stage4-encounters от проверенной карты 4e42f8a, локальный main ca5c26d сохранён. Контракт Game/Docs/S4_01_CONTRACT.md записан до кода, ExecPlan Game/Docs/Plans/S4_ENCOUNTER_PLAN.md. Созданы Game.Encounters immutable Map/Room/Point/Budget/Request/Spawn/Wave/RoomPlan/Plan/Result, IEncounterPlanner, структурный validator и пример 5 комнат с задержанной wave/elite3/2. Дополнительные IRunResourceSink/IActorActionGate/IDodgeCommandSink — только интерфейсы; v0.1/DamagePacket/боевые/input файлы не изменены. Зафиксированы source-owned эффекты/таблица разрешений/кувырок, владение общими файлами и конечные слоты призывов в pending до материализации/явной отмены.

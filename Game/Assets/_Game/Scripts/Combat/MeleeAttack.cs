@@ -31,7 +31,7 @@ namespace Game.Combat
             {
                 if (collider == null) continue;
                 var receiver = collider.GetComponentInParent<DamageReceiver>();
-                if (receiver == null || receiver.IsDead || hitReceivers.Contains(receiver)) continue;
+                if (receiver == null || receiver.IsDead || !receiver.CanReceiveHits || hitReceivers.Contains(receiver)) continue;
                 var actor = collider.GetComponentInParent<ActorIdentity>();
                 if (actor != null && (actor.ActorId == ownerActorId || hitActors.Contains(actor.ActorId) ||
                     (faction != CombatFaction.Neutral && actor.Faction == faction))) continue;
@@ -54,7 +54,9 @@ namespace Game.Combat
             Physics2D.Raycast(origin, offset / distance, filter, obstacles, distance);
             foreach (var hit in obstacles)
             {
-                if (hit.collider == null || hit.collider.GetComponentInParent<DamageReceiver>() == target) continue;
+                if (hit.collider == null) continue;
+                var receiver = hit.collider.GetComponentInParent<DamageReceiver>();
+                if (receiver == target || (receiver != null && !receiver.CanReceiveHits)) continue;
                 var actor = hit.collider.GetComponentInParent<ActorIdentity>();
                 if (actor != null && (actor.ActorId == owner ||
                     (faction != CombatFaction.Neutral && actor.Faction == faction))) continue;

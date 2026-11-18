@@ -32,7 +32,9 @@ namespace Game.StreetMap
         public bool IsPaused { get; private set; }
         public string CurrentRoomId { get; private set; } = "entry";
         public bool HasVisited(int index) => visited[index];
-        public bool IsCombatReady => false; // S4-02 geometry, not the completed Stage 4 slice.
+        private Stage4CombatAssets combatAssets;
+        private readonly List<RoomPickup> pickups = new List<RoomPickup>();
+        public bool IsCombatReady => combatAssets != null;
         protected override bool ShowView => false;
         protected override string Title => "";
         protected override string Description => "";
@@ -77,7 +79,7 @@ namespace Game.StreetMap
             run.Changed += OnPhaseChanged;
             hud.Bind(player);
             string seed = value.CurrentRequest.FixedEncounter == null ? "Тестовый маршрут" : "Seed " + value.CurrentRequest.Seed;
-            hud.SetHint("1-1 · " + seed + " · WASD / Space / Q · Shift: кувырок · E: портал · Esc: пауза\nВ финальной комнате проверочный бой.");
+            hud.SetHint("1-1 · " + seed + " · WASD / Space / Q · Shift: кувырок · E: подбор / портал · Esc: пауза");
             UpdateRoomLabel();
             OnPhaseChanged();
         }
@@ -111,6 +113,9 @@ namespace Game.StreetMap
             if (!validation.IsSuccess) throw new InvalidOperationException(validation.Diagnostic);
             var prefabs = seeded ? Resources.Load<FixedEncounterPrefabs>(FixedEncounterPrefabs.ResourceName) : null;
             if (seeded && (prefabs == null || !prefabs.IsComplete)) throw new InvalidOperationException("Missing encounter prefabs.");
+            combatAssets = seeded ? Resources.Load<Stage4CombatAssets>(Stage4CombatAssets.ResourceName) : null;
+            if (seeded && (combatAssets == null || !combatAssets.IsComplete)) throw new InvalidOperationException("Missing elite and reward prefabs.");
+            if (seeded) HideDiagnosticMarkers();
             var actorRoot = new GameObject("EncounterActors");
             actorRoot.SetActive(false);
             actorRoot.transform.SetParent(transform, false);
@@ -148,32 +153,44 @@ namespace Game.StreetMap
             var diagnosticPoints=new[]{new SpawnPoint("diagnostic_0",-7,4,.6f,new[]{EnemyTypes.Melee}),new SpawnPoint("diagnostic_1",7,4,.6f,new[]{EnemyTypes.Melee})};
             var description4=new EncounterRoom("elite",elite.Center.x,elite.Center.y,28,24,new RoomBudget(2,2,2,1),diagnosticPoints);
             var plan4=new RoomPlan("elite",new[]{new WavePlan("diagnostic",0,new[]{new SpawnPlan("elite/diagnostic/0",EnemyTypes.Melee,"diagnostic_0"),new SpawnPlan("elite/diagnostic/1",EnemyTypes.Melee,"diagnostic_1")})});
+            MonoBehaviour[] actors4;
             if (seeded)
             {
-                var planned = FindRoom(plan, "elite").Waves[0];
-                var points = new List<SpawnPoint>();
-                var spawns = new List<SpawnPlan>();
-                foreach (var spawn in planned.Spawns)
+                description4 = map.Rooms[4];
+                plan4 = FindRoom(plan, "elite");
+                var actors = new List<MonoBehaviour>();
+                foreach (var wave in plan4.Waves)
+                foreach (var spawn in wave.Spawns)
                 {
-                    var point = EncounterPlanValidator.FindPoint(map.Rooms[4], spawn.PointId);
-                    points.Add(new SpawnPoint(point.PointId, point.X, point.Y, point.ClearanceRadius, new[] { EnemyTypes.Melee }));
-                    spawns.Add(new SpawnPlan(spawn.SpawnId, EnemyTypes.Melee, spawn.PointId));
+                    var actor = combatAssets.CreateElite(spawn.EnemyTypeId, actorRoot.transform);
+                    actor.name = spawn.SpawnId;
+                    actors.Add(actor);
                 }
-                description4 = new EncounterRoom("elite", elite.Center.x, elite.Center.y, 28, 24,
-                    new RoomBudget(3, 3, 3, 1), points);
-                plan4 = new RoomPlan("elite", new[] { new WavePlan(planned.WaveId, planned.DelaySeconds, spawns) });
+                actors4 = actors.ToArray();
             }
-            MonoBehaviour[] actors4;
-            if (seeded) actors4 = CreateActors(plan4, prefabs, actorRoot.transform);
             else
             {
                 actors4 = new MonoBehaviour[2];
                 for (int i = 0; i < actors4.Length; i++) actors4[i] = Instantiate(enemies[0], actorRoot.transform);
             }
             var finalGate=new GameObject("EliteDoor").AddComponent<DoorController>();finalGate.transform.SetParent(transform,false);finalGate.Configure(sprite,new Vector2(69,24),new Vector2(.5f,4));
-            var finalRoom=new GameObject("EliteDiagnostic").AddComponent<RoomController>();finalRoom.transform.SetParent(transform,false);
-            finalRoom.Configure(runId,description4,plan4,player,registry,actors4,new[]{finalGate});finalRoom.Cleared+=OnRoomCleared;Rooms[3]=finalRoom;
+            var finalRoom=new GameObject(seeded ? "EliteEncounter" : "EliteDiagnostic").AddComponent<RoomController>();finalRoom.transform.SetParent(transform,false);
+            finalRoom.Configure(runId,description4,plan4,player,registry,actors4,new[]{finalGate},combatAssets);finalRoom.Cleared+=OnRoomCleared;Rooms[3]=finalRoom;
             actorRoot.SetActive(true);
+        }
+        private void HideDiagnosticMarkers()
+        {
+            foreach (var root in gameObject.scene.GetRootGameObjects())
+            {
+                if (!root.name.StartsWith("FixedStreetGeometry", StringComparison.Ordinal)) continue;
+                foreach (var marker in root.GetComponentsInChildren<Transform>(true))
+                {
+                    if (marker.name == "Placeholder_NOT_AN_ENEMY" || marker.name == "EliteWarning_label")
+                        marker.gameObject.SetActive(false);
+                    else if (marker.name == "elite_label" && marker.TryGetComponent<TextMesh>(out var label))
+                        label.text = "ELITE";
+                }
+            }
         }
         private static RoomPlan FindRoom(EncounterPlan plan, string id)
         {
@@ -197,13 +214,52 @@ namespace Game.StreetMap
         {
             if (run == null || room.RunId != run.RunId || !cleared.Add(room.RoomId)) return;
             UpdateRoomLabel();
-            RoomCleared?.Invoke(room.RunId,room.RoomId); // Future rewards subscribe here, no reward system yet.
+            if (combatAssets != null)
+            {
+                int index = Array.IndexOf(Rooms, room);
+                Vector2 center = StreetMapLayout.Rooms[index + 1].Center;
+                if (index < 3) Drop(room, (PickupKind)index, center);
+                else
+                {
+                    Drop(room, PickupKind.Ammo, center + Vector2.left * 2f);
+                    Drop(room, PickupKind.Health, center);
+                    Drop(room, PickupKind.Armor, center + Vector2.right * 2f);
+                }
+            }
+            RoomCleared?.Invoke(room.RunId,room.RoomId);
             if(ClearedCount==4)Portal.TryOpen(player);
+        }
+        private void Drop(RoomController room, PickupKind kind, Vector2 position)
+        {
+            var pickup = combatAssets.CreatePickup(kind, position, transform);
+            pickup.Initialize(room.RunId, room.RoomId);
+            pickups.Add(pickup);
+        }
+        private bool TryPickup()
+        {
+            var position = (Vector2)player.transform.position;
+            RoomPickup nearest = null;
+            float distance = 1.5f;
+            var snapshot = player.ReadSnapshot();
+            foreach (var pickup in pickups)
+            {
+                if (pickup == null || pickup.IsConsumed) continue;
+                if (pickup.Kind == PickupKind.Ammo && snapshot.ReserveAmmo >= WeaponRuntimeState.PickupReserveLimit ||
+                    pickup.Kind == PickupKind.Health && snapshot.Health >= snapshot.MaxHealth ||
+                    pickup.Kind == PickupKind.Armor && snapshot.Armor >= snapshot.MaxArmor) continue;
+                Vector2 offset = (Vector2)pickup.transform.position - position;
+                float range = offset.magnitude;
+                if (range > distance || Physics2D.Raycast(position, offset.normalized, range, LayerMask.GetMask("World"))) continue;
+                nearest = pickup;
+                distance = range;
+            }
+            return nearest != null && nearest.TryCollect(player) > 0;
         }
         private void UpdateRoomLabel()
         {
             string text="1-1 · "+CurrentRoomId+" · пройдено "+ClearedCount+"/4";
-            if(CurrentRoomId=="elite")text+="\nПроверочный бой, НЕ мини-боссы";
+            if (CurrentRoomId == "elite" && combatAssets == null) text += "\nПроверочный бой";
+            else if (combatAssets != null && cleared.Contains(CurrentRoomId)) text += "\nE рядом с предметом: подобрать";
             if (Rooms!=null) foreach (var room in Rooms)
                 if (room.RoomId==CurrentRoomId)
                     text+="\n"+(room.State.Phase==RoomPhase.Cleared ? "Проходы открыты" : "Живых: "+room.State.AliveCount+" · ожидается: "+room.State.PendingCount);
@@ -212,7 +268,8 @@ namespace Game.StreetMap
         }
         public void TryExit()
         {
-            if(run==null || run.Phase!=RunPhase.InArena || IsPaused || player.IsDead || ClearedCount!=4)return;
+            if(run==null || run.Phase!=RunPhase.InArena || IsPaused || player.IsDead)return;
+            if (TryPickup() || ClearedCount != 4) return;
             if(!Portal.TryOpen(player)){UpdateRoomLabel();return;}
             UpdateRoomLabel();
             if(Vector2.Distance(player.transform.position,Portal.transform.position)>1.5f)return;

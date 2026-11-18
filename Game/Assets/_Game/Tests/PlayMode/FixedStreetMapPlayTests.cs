@@ -271,6 +271,275 @@ namespace Game.Tests
         }
 
         [UnityTest]
+        public IEnumerator EliteAndPickups_TenSeededCyclesKeepRewardsAndMandatoryChildrenInsideRun()
+        {
+            var seenEliteTypes = new System.Collections.Generic.HashSet<string>();
+            int completed = 0;
+            for (int cycle = 0; cycle < 10; cycle++)
+            {
+                var home = Object.FindFirstObjectByType<HomeScreen>();
+                if (home.IsShowingResult) home.PrimaryButton.onClick.Invoke();
+                home.FixedSeedInput.text = (cycle == 0 ? 42 : cycle).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                home.SeededStreetButton.onClick.Invoke();
+                yield return Until(() => boot.Coordinator.Phase == RunPhase.InArena);
+                var map = Object.FindFirstObjectByType<StreetMapScreen>();
+                var hero = map.Player;
+                var body = hero.GetComponent<Rigidbody2D>();
+                var receiver = hero.GetComponent<DamageReceiver>();
+                string runId = boot.Coordinator.RunId;
+                Assert.That(hero.ReadSnapshot().Magazine, Is.EqualTo(8));
+                Assert.That(hero.ReadSnapshot().ReserveAmmo, Is.EqualTo(16));
+                Assert.That(Object.FindObjectsByType<RoomPickup>(FindObjectsSortMode.None), Is.Empty);
+                var projectile = new ProjectileSpawnRequest(body.position, Vector2.down, 1f, 30f, .1f, 0,
+                    hero.GetComponent<ActorIdentity>().ActorId, CombatFaction.Player, new DamagePacket(-1, 1));
+                Assert.That(hero.GetComponent<ProjectilePool>().TrySpawn(in projectile), Is.True);
+                bool defeat = cycle == 8, abandon = cycle == 9;
+                for (int index = 0; index < (defeat || abandon ? 2 : map.Rooms.Length); index++)
+                {
+                    var room = map.Rooms[index];
+                    body.position = StreetMapLayout.Rooms[index + 1].Center;
+                    yield return Until(() => room.State.AliveCount > 0);
+                    if (index == 3)
+                    {
+                        var elites = Object.FindObjectsByType<EliteEnemy>(FindObjectsSortMode.None);
+                        Assert.That(elites.Length, Is.EqualTo(3));
+                        var expected = room.State.Plan.Waves[0].Spawns;
+                        Assert.That(elites.Select(e => e.EnemyTypeId), Is.EquivalentTo(expected.Select(s => s.EnemyTypeId)));
+                        Assert.That(elites.Select(e => e.EnemyTypeId).Distinct().Count(), Is.EqualTo(2));
+                        foreach (var elite in elites)
+                            Assert.That(StreetMapLayout.Rooms[4].Bounds.Contains(Vector2Int.FloorToInt(elite.transform.position)),
+                                Is.True, "An elite must appear in its planned room.");
+                        foreach (var elite in elites) seenEliteTypes.Add(elite.EnemyTypeId);
+                        if (cycle == 0)
+                        {
+                            var grenadier = elites.OfType<SlimeGrenadier>().First();
+                            Apply(grenadier.GetComponent<DamageReceiver>(), 100);
+                            yield return Until(() => grenadier.SummonAttempts == 4);
+                            var children = Object.FindObjectsByType<MiniSlime>(FindObjectsSortMode.None);
+                            Assert.That(children.Length, Is.EqualTo(4));
+                            foreach (var elite in elites) Kill(elite);
+                            Assert.That(room.State.AliveCount, Is.EqualTo(4));
+                            Assert.That(room.Doors.All(d => d.IsClosed), Is.True);
+                            yield return new WaitForFixedUpdate();
+                            Assert.That(grenadier.ActiveGrenades, Is.Zero);
+                            foreach (var child in children) Kill(child);
+                        }
+                    }
+                    yield return Until(() => room.State.Phase == RoomPhase.Cleared || room.State.AliveCount > 0);
+                    float waveDeadline = Time.realtimeSinceStartup + 12f;
+                    while (room.State.Phase != RoomPhase.Cleared)
+                    {
+                        Assert.That(Time.realtimeSinceStartup, Is.LessThan(waveDeadline), "Room stalled: " + room.RoomId);
+                        foreach (var actor in Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                            .OfType<IEnemyTarget>().Where(e => !e.IsDead).Cast<MonoBehaviour>()) Kill(actor);
+                        if (index == 1 && room.State.WaveIndex == 1 && room.State.AliveCount == 0)
+                        {
+                            Assert.That(room.Doors.All(d => d.IsClosed), Is.True);
+                            if (defeat || abandon) break;
+                        }
+                        yield return null;
+                    }
+                    if (room.State.Phase != RoomPhase.Cleared) break;
+                    yield return new WaitForFixedUpdate();
+                    var drops = Object.FindObjectsByType<RoomPickup>(FindObjectsSortMode.None)
+                        .Where(p => p.PickupId.StartsWith(runId + "/" + room.RoomId + "/")).ToArray();
+                    Assert.That(drops.Length, Is.EqualTo(index == 3 ? 3 : 1));
+                    Assert.That(drops.Select(d => d.PickupId).Distinct().Count(), Is.EqualTo(drops.Length));
+                    if (index == 0)
+                    {
+                        var before = hero.ReadSnapshot();
+                        map.TryExit();
+                        map.TryExit();
+                        Assert.That(hero.ReadSnapshot().ReserveAmmo, Is.EqualTo(before.ReserveAmmo + 6));
+                        Assert.That(hero.ReadSnapshot().Magazine, Is.EqualTo(before.Magazine));
+                    }
+                    if (index == 1)
+                    {
+                        map.TryExit();
+                        Assert.That(drops[0].Remaining, Is.EqualTo(10));
+                        Apply(receiver, 40);
+                        map.TryExit();
+                        Assert.That(hero.ReadSnapshot().Health, Is.EqualTo(100));
+                    }
+                    if (index == 2)
+                    {
+                        map.Pause();
+                        map.TryExit();
+                        Assert.That(drops[0].Remaining, Is.EqualTo(5));
+                        map.Resume();
+                        map.TryExit();
+                        Assert.That(hero.ReadSnapshot().Armor, Is.EqualTo(5));
+                    }
+                }
+                if (defeat) Apply(receiver, 999);
+                else if (abandon) map.Leave();
+                else
+                {
+                    Assert.That(map.Portal.IsOpen, Is.True);
+                    body.position = map.Portal.transform.position;
+                    yield return new WaitForFixedUpdate();
+                    yield return null;
+                    map.TryExit();
+                    yield return null;
+                    if (boot.Coordinator.Phase == RunPhase.InArena) map.TryExit();
+                    completed++;
+                }
+                yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
+                Assert.That(boot.Coordinator.LastOutcome, Is.EqualTo(defeat ? RunOutcome.Defeat : abandon ? RunOutcome.Abandoned : RunOutcome.Victory));
+                Assert.That(Object.FindObjectsByType<RoomPickup>(FindObjectsSortMode.None), Is.Empty);
+                Assert.That(Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None), Is.Empty);
+            }
+            Assert.That(completed, Is.EqualTo(8));
+            Assert.That(seenEliteTypes.Count, Is.EqualTo(3));
+        }
+
+        [UnityTest]
+        public IEnumerator NurseMist_RejectsHitsInSlimeAndReleasesOnlyItsOwnEffects()
+        {
+            yield return StartMap();
+            var hero = Object.FindFirstObjectByType<StreetMapScreen>().Player;
+            var statuses = hero.GetComponent<ActorStatusController>();
+            var registry = Object.FindFirstObjectByType<TargetRegistry>();
+            var assets = Resources.Load<Stage4CombatAssets>(Stage4CombatAssets.ResourceName);
+            var nurse = (TeleportNurse)assets.CreateElite(EnemyTypes.TeleportNurse, null);
+            nurse.transform.position = new Vector2(4, 0);
+            nurse.Initialize(registry, hero);
+            nurse.gameObject.SetActive(true);
+            var hp = nurse.GetComponent<DamageReceiver>();
+            Assert.That(hp.MaxHealth, Is.EqualTo(120));
+            Apply(hp, 60);
+            yield return Until(() => nurse.IsSlime);
+            Assert.That(registry.Count, Is.Zero);
+            Assert.That(Apply(hp, 15), Is.False);
+            statuses.TryApply(new ActorStatusEffect(9001, "other", ActorStatusKind.Slow, 1f, true, .8f));
+            yield return Until(() => statuses.Contains(nurse.ActorId, "mist_stun"));
+            Assert.That(statuses.StunRemaining, Is.InRange(1.9f, 2f));
+            Assert.That(hero.GetComponent<ActorMotor2D>().Permissions.CanAttack, Is.False);
+            Assert.That(registry.Count, Is.EqualTo(1));
+            yield return Until(() => statuses.StunRemaining <= 0);
+            Assert.That(hero.GetComponent<ActorMotor2D>().Permissions.CanAttack, Is.True);
+            Assert.That(statuses.Contains(nurse.ActorId, "mist_poison"), Is.True);
+            Apply(hp, 999);
+            Assert.That(statuses.Contains(nurse.ActorId, "mist_poison"), Is.False);
+            Assert.That(statuses.Contains(nurse.ActorId, "mist_slow"), Is.False);
+            Assert.That(statuses.Contains(9001, "other"), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator Shield_FrontReducesKnownHeroDamageAndBackCrossesThresholdOnce()
+        {
+            yield return StartMap();
+            var hero = Object.FindFirstObjectByType<StreetMapScreen>().Player;
+            var assets = Resources.Load<Stage4CombatAssets>(Stage4CombatAssets.ResourceName);
+            var guard = (ShieldShotgun)assets.CreateElite(EnemyTypes.ShieldShotgun, null);
+            guard.transform.position = new Vector2(3, 0);
+            guard.Initialize(Object.FindFirstObjectByType<TargetRegistry>(), hero);
+            guard.gameObject.SetActive(true);
+            var hp = guard.GetComponent<DamageReceiver>();
+            int attacker = hero.GetComponent<ActorIdentity>().ActorId;
+            Apply(hp, 100, attacker);
+            Assert.That(hp.Health, Is.EqualTo(265f));
+            hero.transform.position = new Vector2(5, 0);
+            Physics2D.SyncTransforms();
+            Apply(hp, 165, attacker);
+            Assert.That(hp.Health, Is.EqualTo(100f));
+            CreateTestWall(new Vector2(4, 0));
+            yield return Until(() => guard.SpecialUsed);
+            yield return new WaitForSeconds(1.1f);
+            Assert.That(guard.GetComponent<Rigidbody2D>().position.x, Is.LessThan(3.3f), "The ram stops at World.");
+            Assert.That(hero.ReadSnapshot().Armor, Is.EqualTo(30), "Charge and shotgun cannot hit through the wall.");
+        }
+
+        [UnityTest]
+        public IEnumerator Nurse_DirectBoltBindsAndSlimeTimesOutBehindWorld()
+        {
+            yield return StartMap();
+            var hero = Object.FindFirstObjectByType<StreetMapScreen>().Player;
+            var assets = Resources.Load<Stage4CombatAssets>(Stage4CombatAssets.ResourceName);
+            var registry = Object.FindFirstObjectByType<TargetRegistry>();
+            var statuses = hero.GetComponent<ActorStatusController>();
+            var nurse = (TeleportNurse)assets.CreateElite(EnemyTypes.TeleportNurse, null);
+            nurse.transform.position = new Vector2(3f, 0);
+            nurse.Initialize(registry, hero);
+            nurse.gameObject.SetActive(true);
+            yield return Until(() => statuses.Contains(nurse.ActorId, "bind_1"));
+            Assert.That(statuses.Contains(nurse.ActorId, "syringe_poison_1"), Is.True);
+            Assert.That(hero.GetComponent<ActorMotor2D>().Permissions.CanAttack, Is.False);
+            Assert.That(Vector2.Distance(nurse.transform.position, hero.transform.position), Is.LessThanOrEqualTo(1.5f));
+            var hp = nurse.GetComponent<DamageReceiver>();
+            var body = nurse.GetComponent<Rigidbody2D>();
+            body.position = new Vector2(3f, 0);
+            CreateTestWall(new Vector2(1.2f, 0));
+            Apply(hp, 80);
+            yield return Until(() => nurse.IsSlime);
+            yield return new WaitForSeconds(5f);
+            Assert.That(nurse.IsSlime, Is.True);
+            Assert.That(body.position.x, Is.GreaterThan(1.5f));
+            yield return Until(() => !nurse.IsSlime);
+            Assert.That(registry.Count, Is.EqualTo(1));
+            Assert.That(statuses.Contains(nurse.ActorId, "mist_stun"), Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator Pickups_RejectFullAndDeadReceiversAndKeepPartialReserve()
+        {
+            yield return StartMap();
+            var hero = Object.FindFirstObjectByType<StreetMapScreen>().Player;
+            var assets = Resources.Load<Stage4CombatAssets>(Stage4CombatAssets.ResourceName);
+            int changes = 0;
+            hero.Changed += _ => changes++;
+            Assert.That(hero.TryAddReserve(78), Is.EqualTo(78));
+            var ammo = assets.CreatePickup(PickupKind.Ammo, Vector2.zero, hero.transform.parent);
+            ammo.Initialize("test", "room");
+            Assert.That(ammo.TryCollect(hero), Is.EqualTo(2));
+            Assert.That(ammo.Remaining, Is.EqualTo(4));
+            Assert.That(hero.ReadSnapshot().ReserveAmmo, Is.EqualTo(96));
+            Assert.That(hero.ReadSnapshot().Magazine, Is.EqualTo(8));
+            Assert.That(ammo.TryCollect(hero), Is.Zero);
+            Assert.That(hero.TryHeal(10), Is.Zero);
+            Assert.That(hero.TryRepair(float.PositiveInfinity), Is.Zero);
+            Assert.That(changes, Is.EqualTo(2));
+            Apply(hero.GetComponent<DamageReceiver>(), 999);
+            Assert.That(ammo.TryCollect(hero), Is.Zero);
+            Assert.That(ammo.Remaining, Is.EqualTo(4));
+        }
+
+        [UnityTest]
+        public IEnumerator Grenadier_GrenadeStopsAtWorldAndOwnerDeathClearsHazards()
+        {
+            yield return StartMap();
+            var hero = Object.FindFirstObjectByType<StreetMapScreen>().Player;
+            var assets = Resources.Load<Stage4CombatAssets>(Stage4CombatAssets.ResourceName);
+            var grenadier = (SlimeGrenadier)assets.CreateElite(EnemyTypes.SlimeGrenadier, null);
+            grenadier.transform.position = new Vector2(3, 0);
+            grenadier.Initialize(Object.FindFirstObjectByType<TargetRegistry>(), hero);
+            grenadier.gameObject.SetActive(true);
+            CreateTestWall(new Vector2(1.2f, 0));
+            yield return Until(() => grenadier.ActiveGrenades == 1);
+            yield return new WaitForSeconds(1.6f);
+            Assert.That(hero.ReadSnapshot().Armor, Is.EqualTo(30));
+            Assert.That(grenadier.ActiveGrenades, Is.Positive);
+            Apply(grenadier.GetComponent<DamageReceiver>(), 999);
+            Assert.That(grenadier.ActiveGrenades, Is.Zero);
+            Assert.That(grenadier.SpecialUsed, Is.False, "Direct death must not start a special.");
+        }
+
+        private static void CreateTestWall(Vector2 point)
+        {
+            var wall = new GameObject("Test World wall", typeof(BoxCollider2D));
+            wall.transform.position = point;
+            wall.layer = LayerMask.NameToLayer("World");
+            wall.GetComponent<BoxCollider2D>().size = new Vector2(.25f, 5f);
+            Physics2D.SyncTransforms();
+        }
+
+        private static bool Apply(DamageReceiver receiver, float amount, int source = -1)
+        {
+            var packet = new DamagePacket(source, amount, protectionSecondsOverride: 0);
+            return receiver.ApplyDamage(in packet).Applied;
+        }
+
+        [UnityTest]
         public IEnumerator Bootstrap_WalkEntireCorridorRouteWithPhysicsAndFollowingCamera()
         {
             yield return StartMap();

@@ -99,14 +99,18 @@ namespace Game.Tests
             }
             TestContext.WriteLine("REFERENCE seeds0..999 x2; 3 future plan stages; success=1000 failure=0 fallback="+fallbacks+" elapsedMs="+timer.Elapsed.TotalMilliseconds.ToString("F3",System.Globalization.CultureInfo.InvariantCulture));
         }
-        [Serializable] private sealed class Export { public string mapId;public int mapVersion,geometryVersion;public bool elitePrefabsCertified;public Room[] rooms; }
+        [Serializable] private sealed class Export { public string mapId;public int mapVersion,geometryVersion;public bool elitePrefabsCertified;public Room[] rooms;public UnityEngine.Vector2[] certifiedSummonPoints; }
         [Serializable] private sealed class Room { public string roomId;public float centerX,centerY,width,height;public bool isElite;public int minEnemies,maxEnemies,maxCost,maxWaves,maxSummons;public Point[] points; }
         [Serializable] private sealed class Point { public string pointId;public float x,y,clearanceRadius;public bool isHeroEntry;public string[] allowedEnemyTypeIds; }
-        [Test] public void ActualExportAndUnityCatalogThousandSeedsMatchSeparately()
+        [TestCase("S4_FIXED_MAP_V2.json", false)]
+        [TestCase("S4_FIXED_MAP_V2_COMBAT.json", true)]
+        public void ActualExportAndUnityCatalogThousandSeedsMatchSeparately(string filename, bool verifyCombat)
         {
-            string path="Game/Docs/Exports/S4_FIXED_MAP_V2.json";if(!File.Exists(path))path="Docs/Exports/S4_FIXED_MAP_V2.json";
+            var relativePath=Path.Combine("Docs", "Exports", filename);
+            var path=File.Exists(relativePath) ? relativePath : Path.Combine("Game", relativePath);
             var bytes=File.ReadAllBytes(path);string hash;using(var sha=System.Security.Cryptography.SHA256.Create())hash=BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-","").ToLowerInvariant();
-            var data=JsonUtility.FromJson<Export>(System.Text.Encoding.UTF8.GetString(bytes));Assert.That(data.rooms.Length,Is.EqualTo(5));Assert.That(data.elitePrefabsCertified,Is.False);
+            var data=JsonUtility.FromJson<Export>(System.Text.Encoding.UTF8.GetString(bytes));Assert.That(data.rooms.Length,Is.EqualTo(5));Assert.That(data.elitePrefabsCertified,Is.EqualTo(verifyCombat));
+            if (verifyCombat) Assert.That(data.certifiedSummonPoints.Distinct().Count(), Is.EqualTo(24));
             var map=new EncounterMap(data.mapId,data.mapVersion,data.rooms.Select(r=>new EncounterRoom(r.roomId,r.centerX,r.centerY,r.width,r.height,new RoomBudget(r.minEnemies,r.maxEnemies,r.maxCost,r.maxWaves,r.maxSummons),r.points.Select(p=>new SpawnPoint(p.pointId,p.x,p.y,p.clearanceRadius,p.allowedEnemyTypeIds,p.isHeroEntry)),r.isElite)));
             var unity=Game.StreetMap.StreetMapCatalog.Create();
             Assert.That(data.geometryVersion,Is.EqualTo(1));Assert.That(map.MapId,Is.EqualTo(unity.MapId));Assert.That(map.MapVersion,Is.EqualTo(unity.MapVersion));
@@ -130,6 +134,7 @@ namespace Game.Tests
                 Assert.That(a.IsSuccess,Is.True,a.Diagnostic);Assert.That(b.IsSuccess,Is.True,b.Diagnostic);Assert.That(EncounterPlanValidator.ValidateStage(map,a.Plan).IsSuccess,Is.True);
                 Assert.That(EncounterPlannerTests.Snapshot(a.Plan),Is.EqualTo(EncounterPlannerTests.Snapshot(b.Plan)));if(a.UsedFallback)fallback++;
             }
+            Assert.That(fallback, Is.Zero);
             TestContext.WriteLine("ACTUAL EXPORT sha256="+hash+" MapVersion="+data.mapVersion+" GeometryVersion="+data.geometryVersion+" eliteCertified="+data.elitePrefabsCertified+" seeds=1000 success=1000 failure=0 fallback="+fallback+" elapsedMs="+timer.Elapsed.TotalMilliseconds.ToString("F3",System.Globalization.CultureInfo.InvariantCulture));
         }
     }

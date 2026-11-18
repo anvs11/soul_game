@@ -3,6 +3,7 @@ using System;
 using Game.Street;
 using Game.StreetMap;
 using Game.Encounters;
+using Game.Combat;
 using System.Globalization;
 using UnityEngine.UI;
 using UnityEngine;
@@ -134,7 +135,8 @@ namespace Game.UI
                 return;
             }
             var prefabs = Resources.Load<FixedEncounterPrefabs>(FixedEncounterPrefabs.ResourceName);
-            if (prefabs == null || !prefabs.IsComplete)
+            var combat = Resources.Load<Stage4CombatAssets>(Stage4CombatAssets.ResourceName);
+            if (prefabs == null || !prefabs.IsComplete || combat == null || !combat.IsComplete)
             {
                 streetError = "Не найдены ресурсы противников 1-1.";
                 Refresh();

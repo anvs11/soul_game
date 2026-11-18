@@ -30,5 +30,19 @@ namespace Game.Actors
             CurrentArmor -= armorLost; CurrentHealth -= healthLost;
             return new DamageResult(armorLost, healthLost, IsDead);
         }
+        public float TryHeal(float amount)
+        {
+            if (IsDead || !(amount > 0) || float.IsInfinity(amount)) return 0;
+            float accepted = Math.Min(amount, MaxHealth - CurrentHealth);
+            CurrentHealth += accepted;
+            return accepted;
+        }
+        public float TryRepair(float amount)
+        {
+            if (IsDead || !(amount > 0) || float.IsInfinity(amount)) return 0;
+            float accepted = Math.Min(amount, MaxArmor - CurrentArmor);
+            CurrentArmor += accepted;
+            return accepted;
+        }
     }
 }

@@ -6,6 +6,14 @@ namespace Game.StreetMap
 {
     public static class StreetMapCatalog
     {
+        public static IEnumerable<Vector2> SummonCandidates(Vector2 origin, int slot)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                float angle = ((i + slot * 2) % 8) * Mathf.PI / 4f;
+                yield return origin + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * 1.5f;
+            }
+        }
         public static EncounterMap Create()
         {
             var result=new List<EncounterRoom>();

@@ -16,6 +16,13 @@ namespace Game.Combat
         public bool IsMelee => !Selected;
         public int Magazine { get; private set; }
         public int ReserveAmmo { get; private set; }
+        public const int PickupReserveLimit = 96;
+        internal int TryAddReserve(int amount)
+        {
+            int accepted = Math.Min(Math.Max(0, amount), Math.Max(0, PickupReserveLimit - ReserveAmmo));
+            ReserveAmmo += accepted;
+            return accepted;
+        }
         public int MagazineCapacity => definition.MagazineCapacity;
         public bool Selected { get; private set; } = true;
         public bool IsReloading => reloadRemaining > 0;

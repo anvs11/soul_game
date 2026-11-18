@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d00874109347d74baf2e56687968613, type: 3}
+  m_Name: Stage4CombatAssets
+  m_EditorClassIdentifier: Game.Runtime::Game.Combat.Stage4CombatAssets
+  grenadier: {fileID: 929030343937317631, guid: fdd45e8c62930ca42886d9fa13933945, type: 3}
+  guard: {fileID: 7281283046030322056, guid: d2923255d7505544f89b0003f274aa4f, type: 3}
+  nurse: {fileID: 6197448385415203575, guid: aa365dd335b50014a9b45c30695569de, type: 3}
+  slime: {fileID: 7324788548385805417, guid: 37e73e5e736790d4f9cc698597d9abe9, type: 3}
+  ammo: {fileID: 2345763464060801762, guid: dc639577c1b129d4eb7c756db3570719, type: 3}
+  health: {fileID: 1244489415174752676, guid: b6d6f88d07606b44e8c3c51b9ea1b2df, type: 3}
+  armor: {fileID: 5907555413535256642, guid: 8bf5aff0ebae1854db51db2869f67730, type: 3}

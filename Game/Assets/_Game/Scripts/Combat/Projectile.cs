@@ -37,6 +37,8 @@ namespace Game.Combat
                 var identity = hit.collider.GetComponentInParent<ActorIdentity>();
                 if (identity != null && (identity.ActorId == request.OwnerActorId ||
                     (request.Faction != CombatFaction.Neutral && identity.Faction == request.Faction))) continue;
+                var target = hit.collider.GetComponentInParent<DamageReceiver>();
+                if (target != null && !target.CanReceiveHits) continue;
                 if (hit.distance >= nearest) continue;
                 closest = hit; nearest = hit.distance;
             }

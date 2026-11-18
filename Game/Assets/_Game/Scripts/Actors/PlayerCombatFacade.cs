@@ -7,7 +7,7 @@ namespace Game.Actors
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(DamageReceiver), typeof(ActorMotor2D))]
-    public sealed class PlayerCombatFacade : MonoBehaviour, IPlayerCombatSource
+    public sealed class PlayerCombatFacade : MonoBehaviour, IPlayerCombatSource, IRunResourceSink
     {
         private DamageReceiver receiver;
         private ActorMotor2D motor;
@@ -19,6 +19,28 @@ namespace Game.Actors
         public event Action Died;
         public event Action InteractRequested;
         public event Action PauseRequested;
+        private bool CanCollect => isActiveAndEnabled && controlsEnabled && Time.timeScale > 0f && !IsDead;
+        public int TryAddReserve(int amount)
+        {
+            if (!CanCollect || weapon == null) return 0;
+            int accepted = weapon.State.TryAddReserve(amount);
+            if (accepted > 0) PublishState();
+            return accepted;
+        }
+        public float TryHeal(float amount)
+        {
+            if (!CanCollect) return 0;
+            float accepted = receiver.TryHeal(amount);
+            if (accepted > 0) PublishState();
+            return accepted;
+        }
+        public float TryRepair(float amount)
+        {
+            if (!CanCollect) return 0;
+            float accepted = receiver.TryRepair(amount);
+            if (accepted > 0) PublishState();
+            return accepted;
+        }
         private void EnsureReferences()
         {
             if (receiver == null) receiver = GetComponent<DamageReceiver>();

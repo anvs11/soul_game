@@ -25,7 +25,7 @@ namespace Game.StreetMap
         public IReadOnlyList<DoorController> Doors => doors;
         public event Action<RoomController> Cleared;
 
-        public void Configure(string runId, EncounterRoom description, RoomPlan plan, PlayerCombatFacade player, TargetRegistry registry, MonoBehaviour[] actors, DoorController[] gates)
+        public void Configure(string runId, EncounterRoom description, RoomPlan plan, PlayerCombatFacade player, TargetRegistry registry, MonoBehaviour[] actors, DoorController[] gates, Stage4CombatAssets combatAssets = null)
         {
             if (State != null) throw new InvalidOperationException("A room belongs to one run only.");
             if (string.IsNullOrWhiteSpace(runId) || description == null || plan == null || description.RoomId != plan.RoomId || player == null || registry == null || actors == null || gates == null || gates.Length == 0)
@@ -39,7 +39,15 @@ namespace Game.StreetMap
                     if (index >= actors.Length || !MatchesType(actors[index], spawn.EnemyTypeId))
                         throw new ArgumentException("Missing actor for " + spawn.SpawnId + ": " + spawn.EnemyTypeId);
                     if (primaryActors.ContainsValue(actors[index])) throw new ArgumentException("Each primary SpawnId needs a unique actor.");
-                    primaryActors.Add(spawn.SpawnId,actors[index++]);
+                    var actor = actors[index++];
+                    primaryActors.Add(spawn.SpawnId, actor);
+                    if (actor is SlimeGrenadier grenadier)
+                    {
+                        if (combatAssets == null) throw new ArgumentException("Grenadier requires summon prefabs.");
+                        grenadier.ConfigureSummons(spawn.ReservedSummons,
+                            slot => SpawnSlime(grenadier, spawn.SpawnId, slot, combatAssets, registry),
+                            () => CancelUnmaterializedSummons(spawn.SpawnId));
+                    }
                 }
             if (index != actors.Length) throw new ArgumentException("Actor count does not match plan.");
             room = description; hero = player; doors = (DoorController[])gates.Clone(); RunId = runId;
@@ -52,6 +60,7 @@ namespace Game.StreetMap
                     case SandboxEnemy melee: melee.Initialize(registry, hero.transform); break;
                     case JumpingEnemy jumper: jumper.Initialize(registry, hero.transform); break;
                     case ShootingEnemy shooter: shooter.Initialize(registry, hero.transform); break;
+                    case EliteEnemy elite: elite.Initialize(registry, hero); break;
                 }
             }
             State = new RoomEncounterState(plan);
@@ -59,7 +68,34 @@ namespace Game.StreetMap
         private static bool MatchesType(MonoBehaviour actor, string type) => actor != null &&
             (type == EnemyTypes.Melee && actor is SandboxEnemy ||
              type == EnemyTypes.Jumper && actor is JumpingEnemy ||
-             type == EnemyTypes.Shooter && actor is ShootingEnemy);
+             type == EnemyTypes.Shooter && actor is ShootingEnemy ||
+             actor is EliteEnemy elite && elite.EnemyTypeId == type);
+        private bool SpawnSlime(SlimeGrenadier owner, string ownerId, int slot, Stage4CombatAssets assets, TargetRegistry registry)
+        {
+            if (State == null || !State.IsActive || slot < 0 || slot >= 4) return false;
+            Vector2 origin = owner.GetComponent<Rigidbody2D>().position;
+            Physics2D.SyncTransforms();
+            int obstructed = 0;
+            foreach (Vector2 point in StreetMapCatalog.SummonCandidates(origin, slot))
+            {
+                if (Mathf.Abs(point.x - room.CenterX) > room.Width / 2f - .5f ||
+                    Mathf.Abs(point.y - room.CenterY) > room.Height / 2f - .5f || !SpawnIsFree(point, .32f)) { obstructed++; continue; }
+                Vector2 delta = point - origin;
+                if (Physics2D.CircleCast(origin, .28f, delta.normalized, delta.magnitude, LayerMask.GetMask("World"))) { obstructed++; continue; }
+                var child = assets.CreateSlime(transform);
+                child.name = ownerId + "/summon/" + slot;
+                child.Initialize(registry, hero);
+                PlaceInactiveActor(child, point);
+                child.gameObject.SetActive(true);
+                if (TryMaterializeSummon(ownerId, slot, child)) return true;
+                Debug.Log($"Summon {ownerId}/{slot} rejected at {point}; phase={State.Phase}, targetActive={child.isActiveAndEnabled}, targetDead={child.IsDead}");
+                child.gameObject.SetActive(false);
+                Destroy(child.gameObject);
+                return false;
+            }
+            Debug.Log($"Summon {ownerId}/{slot} lacked safe placement at {origin}; room={room.RoomId}; blocked={obstructed}");
+            return false;
+        }
         private void FixedUpdate()
         {
             if (State == null || hero == null) return;
@@ -103,9 +139,15 @@ namespace Game.StreetMap
                 var point = EncounterPlanValidator.FindPoint(room,spawn.PointId);
                 var position = new Vector2(room.CenterX+point.X,room.CenterY+point.Y);
                 if (!SpawnIsFree(position,EnemyTypes.Radius(spawn.EnemyTypeId))) continue;
-                actor.GetComponent<Rigidbody2D>().position = position;
+                PlaceInactiveActor(actor, position);
                 if (Attach(spawn.SpawnId,(IEnemyTarget)actor)) actor.gameObject.SetActive(true);
             }
+        }
+        private static void PlaceInactiveActor(Component actor, Vector2 point)
+        {
+            // Unity can initialize a disabled prefab's body from the Transform on first activation.
+            actor.transform.position = point;
+            actor.GetComponent<Rigidbody2D>().position = point;
         }
         private bool SpawnIsFree(Vector2 position,float radius)
         {
