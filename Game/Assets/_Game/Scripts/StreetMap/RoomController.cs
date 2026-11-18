@@ -12,7 +12,7 @@ namespace Game.StreetMap
     {
         private sealed class Binding { public IEnemyTarget Target; public Action Died; }
         private readonly Dictionary<string, Binding> bindings = new Dictionary<string, Binding>(StringComparer.Ordinal);
-        private readonly Dictionary<string, SandboxEnemy> primaryActors = new Dictionary<string, SandboxEnemy>(StringComparer.Ordinal);
+        private readonly Dictionary<string, MonoBehaviour> primaryActors = new Dictionary<string, MonoBehaviour>(StringComparer.Ordinal);
         private readonly List<Collider2D> occupants = new List<Collider2D>();
         private EncounterRoom room;
         private PlayerCombatFacade hero;
@@ -25,7 +25,7 @@ namespace Game.StreetMap
         public IReadOnlyList<DoorController> Doors => doors;
         public event Action<RoomController> Cleared;
 
-        public void Configure(string runId, EncounterRoom description, RoomPlan plan, PlayerCombatFacade player, TargetRegistry registry, SandboxEnemy[] actors, DoorController[] gates)
+        public void Configure(string runId, EncounterRoom description, RoomPlan plan, PlayerCombatFacade player, TargetRegistry registry, MonoBehaviour[] actors, DoorController[] gates)
         {
             if (State != null) throw new InvalidOperationException("A room belongs to one run only.");
             if (string.IsNullOrWhiteSpace(runId) || description == null || plan == null || description.RoomId != plan.RoomId || player == null || registry == null || actors == null || gates == null || gates.Length == 0)
@@ -36,17 +36,30 @@ namespace Game.StreetMap
             foreach (var wave in plan.Waves)
                 foreach (var spawn in wave.Spawns)
                 {
-                    if (spawn.EnemyTypeId != EnemyTypes.Melee || EncounterPlanValidator.FindPoint(description,spawn.PointId) == null || index >= actors.Length || actors[index] == null)
-                        throw new ArgumentException("S4-04A runtime supports fixed ordinary melee only.");
+                    if (index >= actors.Length || !MatchesType(actors[index], spawn.EnemyTypeId))
+                        throw new ArgumentException("Missing actor for " + spawn.SpawnId + ": " + spawn.EnemyTypeId);
                     if (primaryActors.ContainsValue(actors[index])) throw new ArgumentException("Each primary SpawnId needs a unique actor.");
                     primaryActors.Add(spawn.SpawnId,actors[index++]);
                 }
             if (index != actors.Length) throw new ArgumentException("Actor count does not match plan.");
             room = description; hero = player; doors = (DoorController[])gates.Clone(); RunId = runId;
             heroColliders = hero.GetComponentsInChildren<Collider2D>();
-            foreach (var actor in actors) { actor.gameObject.SetActive(false); actor.Initialize(registry, hero.transform); }
+            foreach (var actor in actors)
+            {
+                actor.gameObject.SetActive(false);
+                switch (actor)
+                {
+                    case SandboxEnemy melee: melee.Initialize(registry, hero.transform); break;
+                    case JumpingEnemy jumper: jumper.Initialize(registry, hero.transform); break;
+                    case ShootingEnemy shooter: shooter.Initialize(registry, hero.transform); break;
+                }
+            }
             State = new RoomEncounterState(plan);
         }
+        private static bool MatchesType(MonoBehaviour actor, string type) => actor != null &&
+            (type == EnemyTypes.Melee && actor is SandboxEnemy ||
+             type == EnemyTypes.Jumper && actor is JumpingEnemy ||
+             type == EnemyTypes.Shooter && actor is ShootingEnemy);
         private void FixedUpdate()
         {
             if (State == null || hero == null) return;
@@ -86,13 +99,12 @@ namespace Game.StreetMap
             {
                 if (!State.CanMaterialize(spawn.SpawnId)) continue;
                 var actor = primaryActors[spawn.SpawnId];
-                if (actor == null || actor.IsDead) continue; // Missing/disabled is never a kill.
+                if (actor == null || ((IEnemyTarget)actor).IsDead) continue;
                 var point = EncounterPlanValidator.FindPoint(room,spawn.PointId);
                 var position = new Vector2(room.CenterX+point.X,room.CenterY+point.Y);
                 if (!SpawnIsFree(position,EnemyTypes.Radius(spawn.EnemyTypeId))) continue;
                 actor.GetComponent<Rigidbody2D>().position = position;
-                Attach(spawn.SpawnId,actor);
-                actor.gameObject.SetActive(true);
+                if (Attach(spawn.SpawnId,(IEnemyTarget)actor)) actor.gameObject.SetActive(true);
             }
         }
         private bool SpawnIsFree(Vector2 position,float radius)

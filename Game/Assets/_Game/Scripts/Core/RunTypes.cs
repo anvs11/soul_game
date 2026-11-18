@@ -1,4 +1,5 @@
 using System;
+using Game.Encounters;
 
 namespace Game.Core
 {
@@ -22,21 +23,25 @@ namespace Game.Core
     {
         public string ArenaId { get; }
         public int Seed { get; }
+        public EncounterPlan FixedEncounter { get; }
         public bool IsStreetRun => ArenaId == ScenePaths.Stage3StreetSandbox;
         public bool IsFixedStreet1_1 => ArenaId == ScenePaths.Stage4StreetMap;
         public bool IsStage2Route { get; }
         public bool IsStage2Diagnostic => ArenaId == ScenePaths.Stage2CombatSandbox && !IsStage2Route;
 
-        public RunRequest(string arenaId, int seed, bool isStage2Route = false)
+        public RunRequest(string arenaId, int seed, bool isStage2Route = false, EncounterPlan fixedEncounter = null)
         {
             ArenaId = arenaId;
             Seed = seed;
             IsStage2Route = isStage2Route;
+            FixedEncounter = fixedEncounter;
         }
 
         public static RunRequest StreetRun(int seed = 0) => new RunRequest(ScenePaths.Stage3StreetSandbox, seed);
 
         public static RunRequest FixedStreet1_1(int seed = 0) => new RunRequest(ScenePaths.Stage4StreetMap, seed);
+        public static RunRequest FixedStreet1_1(EncounterPlan plan) =>
+            new RunRequest(ScenePaths.Stage4StreetMap, plan.Seed, fixedEncounter: plan);
 
         public static RunRequest Stage2(int seed = 0) => new RunRequest(ScenePaths.Stage2CombatSandbox, seed, true);
 

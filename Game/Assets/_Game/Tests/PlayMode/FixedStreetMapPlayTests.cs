@@ -4,6 +4,8 @@ using Game.Actors;
 using Game.AI;
 using Game.Combat;
 using Game.Core;
+using Game.Encounters;
+using System.Linq;
 using Game.Input;
 using Game.StreetMap;
 using Game.UI;
@@ -63,6 +65,73 @@ namespace Game.Tests
             Assert.That(Object.FindObjectsByType<GameBootstrap>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
             Assert.That(Object.FindObjectsByType<EventSystem>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
             Assert.That(Object.FindObjectsByType<InputSystemUIInputModule>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator SeededHome_RejectsInvalidInputAndReplaysTheGeneratedWaves()
+        {
+            var home = Object.FindFirstObjectByType<HomeScreen>();
+            home.FixedSeedInput.text = "abc";
+            home.SeededStreetButton.onClick.Invoke();
+            Assert.That(boot.Coordinator.Phase, Is.EqualTo(RunPhase.Home));
+            Assert.That(home.StreetError, Is.Not.Empty);
+            string first = null;
+            int? freshSeed = null;
+            foreach (string input in new[] { "", null, "42" })
+            {
+                home = Object.FindFirstObjectByType<HomeScreen>();
+                if (home.IsShowingResult) home.PrimaryButton.onClick.Invoke();
+                home.FixedSeedInput.text = input ?? freshSeed.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                home.SeededStreetButton.onClick.Invoke();
+                yield return Until(() => boot.Coordinator.Phase == RunPhase.InArena);
+                var plan = boot.Coordinator.CurrentRequest.FixedEncounter;
+                Assert.That(plan, Is.Not.Null);
+                var snapshot = string.Join("|", plan.Rooms.SelectMany(r => r.Waves)
+                    .SelectMany(w => w.Spawns).Select(s => s.EnemyTypeId + "@" + s.PointId));
+                if (input == "") { first = snapshot; freshSeed = plan.Seed; }
+                else if (input == null) { Assert.That(plan.Seed, Is.EqualTo(freshSeed)); Assert.That(snapshot, Is.EqualTo(first)); }
+                var screen = Object.FindFirstObjectByType<StreetMapScreen>();
+                Assert.That(screen.Rooms[1].State.Plan.Waves.Count, Is.EqualTo(2));
+                Assert.That(Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None).OfType<IEnemyTarget>(), Is.Empty);
+                var room = screen.Rooms[0];
+                var body = screen.Player.GetComponent<Rigidbody2D>();
+                body.position = StreetMapLayout.Rooms[1].Center;
+                yield return Until(() => room.State.AliveCount == room.State.Plan.Waves[0].Spawns.Count);
+                var active = Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None).OfType<IEnemyTarget>().ToArray();
+                Assert.That(active.Length, Is.EqualTo(room.State.AliveCount));
+                foreach (var enemy in active.Cast<MonoBehaviour>())
+                {
+                    var spawn = room.State.Plan.Waves[0].Spawns.Single(s => s.SpawnId == enemy.name);
+                    string type = enemy is ShootingEnemy ? EnemyTypes.Shooter : enemy is JumpingEnemy ? EnemyTypes.Jumper : EnemyTypes.Melee;
+                    Assert.That(type, Is.EqualTo(spawn.EnemyTypeId));
+                }
+                if (input == "42")
+                {
+                    foreach (var enemy in active.Cast<MonoBehaviour>()) Kill(enemy);
+                    var secondRoom = screen.Rooms[1];
+                    body.position = StreetMapLayout.Rooms[2].Center;
+                    yield return Until(() => secondRoom.State.AliveCount == secondRoom.State.Plan.Waves[0].Spawns.Count);
+                    foreach (var enemy in Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                        .OfType<IEnemyTarget>().Where(e => !e.IsDead).Cast<MonoBehaviour>()) Kill(enemy);
+                    Assert.That(secondRoom.State.AliveCount, Is.Zero);
+                    Assert.That(secondRoom.Doors.All(d => d.IsClosed), Is.True);
+                    var nextWave = secondRoom.State.Plan.Waves[1];
+                    yield return Until(() => secondRoom.State.AliveCount == nextWave.Spawns.Count);
+                    var secondWaveActors = Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                        .OfType<IEnemyTarget>().Where(e => !e.IsDead).Cast<MonoBehaviour>().ToArray();
+                    Assert.That(secondWaveActors.Select(a => a.name), Is.EquivalentTo(nextWave.Spawns.Select(s => s.SpawnId)));
+                    foreach (var enemy in secondWaveActors) Kill(enemy);
+                    Assert.That(secondRoom.State.Phase, Is.EqualTo(RoomPhase.Cleared));
+                    Assert.That(secondRoom.Doors.All(d => !d.IsClosed), Is.True);
+                }
+                screen.Leave();
+                yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
+            }
+        }
+        private static void Kill(MonoBehaviour enemy)
+        {
+            var packet = new DamagePacket(-1, 999);
+            enemy.GetComponent<DamageReceiver>().ApplyDamage(in packet);
         }
 
         [UnityTest]

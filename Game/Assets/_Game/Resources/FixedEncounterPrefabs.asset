@@ -1,0 +1,17 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5cc31eaeea3abbb468921008bfe19db7, type: 3}
+  m_Name: FixedEncounterPrefabs
+  m_EditorClassIdentifier: Game.Runtime::Game.StreetMap.FixedEncounterPrefabs
+  melee: {fileID: 1014, guid: 7d787d0a3c264d82a0dad585297a589e, type: 3}
+  jumper: {fileID: 2379070847776234039, guid: a1ba609401efbb94a988b17881fafff6, type: 3}
+  shooter: {fileID: 6330068177270299623, guid: d5aa446d78097ae458c4bd98fc110a1b, type: 3}

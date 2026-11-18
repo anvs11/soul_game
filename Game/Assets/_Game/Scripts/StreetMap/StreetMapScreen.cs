@@ -74,7 +74,8 @@ namespace Game.StreetMap
             player.InteractRequested += TryExit;
             run.Changed += OnPhaseChanged;
             hud.Bind(player);
-            hud.SetHint("1-1 · WASD / Space / Q · E: портал · Esc: пауза\nПроверочный бой вместо мини-боссов. Награды и настоящая элита ещё не готовы.");
+            string seed = value.CurrentRequest.FixedEncounter == null ? "Тестовый маршрут" : "Seed " + value.CurrentRequest.Seed;
+            hud.SetHint("1-1 · " + seed + " · WASD / Space / Q · E: портал · Esc: пауза\nВ финальной комнате проверочный бой.");
             UpdateRoomLabel();
             OnPhaseChanged();
         }
@@ -101,9 +102,16 @@ namespace Game.StreetMap
         private void CreateRooms(string runId)
         {
             if (Rooms != null) throw new InvalidOperationException("Load a fresh map for a new run.");
-            var map = EncounterExample.CreateMap(); var plan = EncounterExample.CreateFixedPlan(run.CurrentRequest.Seed);
-            var validation = EncounterPlanValidator.Validate(map,plan);
+            bool seeded = run.CurrentRequest.FixedEncounter != null;
+            var map = seeded ? StreetMapCatalog.Create() : EncounterExample.CreateMap();
+            var plan = run.CurrentRequest.FixedEncounter ?? EncounterExample.CreateFixedPlan(run.CurrentRequest.Seed);
+            var validation = seeded ? EncounterPlanValidator.ValidateStage(map, plan) : EncounterPlanValidator.Validate(map,plan);
             if (!validation.IsSuccess) throw new InvalidOperationException(validation.Diagnostic);
+            var prefabs = seeded ? Resources.Load<FixedEncounterPrefabs>(FixedEncounterPrefabs.ResourceName) : null;
+            if (seeded && (prefabs == null || !prefabs.IsComplete)) throw new InvalidOperationException("Missing encounter prefabs.");
+            var actorRoot = new GameObject("EncounterActors");
+            actorRoot.SetActive(false);
+            actorRoot.transform.SetParent(transform, false);
             var positions = new[]
             {
                 new[] {new Vector2(13,0),new Vector2(23,8)},
@@ -128,18 +136,60 @@ namespace Game.StreetMap
                 }
                 var room=new GameObject(description.RoomId+"_Encounter").AddComponent<RoomController>();
                 room.transform.SetParent(transform,false);
-                room.Configure(runId,description,plan.Rooms[index+1],player,registry,new[]{enemies[index*2],enemies[index*2+1]},gates);
+                var roomPlan = FindRoom(plan, description.RoomId);
+                MonoBehaviour[] actors = seeded ? CreateActors(roomPlan, prefabs, actorRoot.transform) :
+                    new MonoBehaviour[] { enemies[index*2], enemies[index*2+1] };
+                room.Configure(runId,description,roomPlan,player,registry,actors,gates);
                 room.Cleared+=OnRoomCleared; Rooms[index]=room;
             }
             var elite=StreetMapLayout.Rooms[4];
             var diagnosticPoints=new[]{new SpawnPoint("diagnostic_0",-7,4,.6f,new[]{EnemyTypes.Melee}),new SpawnPoint("diagnostic_1",7,4,.6f,new[]{EnemyTypes.Melee})};
             var description4=new EncounterRoom("elite",elite.Center.x,elite.Center.y,28,24,new RoomBudget(2,2,2,1),diagnosticPoints);
             var plan4=new RoomPlan("elite",new[]{new WavePlan("diagnostic",0,new[]{new SpawnPlan("elite/diagnostic/0",EnemyTypes.Melee,"diagnostic_0"),new SpawnPlan("elite/diagnostic/1",EnemyTypes.Melee,"diagnostic_1")})});
-            var actors4=new SandboxEnemy[2];
-            for(int i=0;i<2;i++){actors4[i]=Instantiate(enemies[0]);actors4[i].name="DiagnosticElite_"+i;actors4[i].transform.SetParent(transform,false);actors4[i].gameObject.SetActive(false);}
+            if (seeded)
+            {
+                var planned = FindRoom(plan, "elite").Waves[0];
+                var points = new List<SpawnPoint>();
+                var spawns = new List<SpawnPlan>();
+                foreach (var spawn in planned.Spawns)
+                {
+                    var point = EncounterPlanValidator.FindPoint(map.Rooms[4], spawn.PointId);
+                    points.Add(new SpawnPoint(point.PointId, point.X, point.Y, point.ClearanceRadius, new[] { EnemyTypes.Melee }));
+                    spawns.Add(new SpawnPlan(spawn.SpawnId, EnemyTypes.Melee, spawn.PointId));
+                }
+                description4 = new EncounterRoom("elite", elite.Center.x, elite.Center.y, 28, 24,
+                    new RoomBudget(3, 3, 3, 1), points);
+                plan4 = new RoomPlan("elite", new[] { new WavePlan(planned.WaveId, planned.DelaySeconds, spawns) });
+            }
+            MonoBehaviour[] actors4;
+            if (seeded) actors4 = CreateActors(plan4, prefabs, actorRoot.transform);
+            else
+            {
+                actors4 = new MonoBehaviour[2];
+                for (int i = 0; i < actors4.Length; i++) actors4[i] = Instantiate(enemies[0], actorRoot.transform);
+            }
             var finalGate=new GameObject("EliteDoor").AddComponent<DoorController>();finalGate.transform.SetParent(transform,false);finalGate.Configure(sprite,new Vector2(69,24),new Vector2(.5f,4));
             var finalRoom=new GameObject("EliteDiagnostic").AddComponent<RoomController>();finalRoom.transform.SetParent(transform,false);
             finalRoom.Configure(runId,description4,plan4,player,registry,actors4,new[]{finalGate});finalRoom.Cleared+=OnRoomCleared;Rooms[3]=finalRoom;
+            actorRoot.SetActive(true);
+        }
+        private static RoomPlan FindRoom(EncounterPlan plan, string id)
+        {
+            foreach (var room in plan.Rooms) if (room.RoomId == id) return room;
+            throw new InvalidOperationException("Missing room plan: " + id);
+        }
+        private static MonoBehaviour[] CreateActors(RoomPlan room, FixedEncounterPrefabs prefabs, Transform parent)
+        {
+            var actors = new List<MonoBehaviour>();
+            foreach (var wave in room.Waves)
+                foreach (var spawn in wave.Spawns)
+                {
+                    var actor = prefabs.InstantiateActor(spawn.EnemyTypeId, parent);
+                    actor.gameObject.SetActive(false);
+                    actor.name = spawn.SpawnId;
+                    actors.Add(actor);
+                }
+            return actors.ToArray();
         }
         private void OnRoomCleared(RoomController room)
         {
