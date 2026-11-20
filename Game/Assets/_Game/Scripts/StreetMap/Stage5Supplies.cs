@@ -24,7 +24,7 @@ namespace Game.StreetMap
         private readonly Stage5PreviewController map;
         private readonly Func<Vector2, float, bool> near;
         private string corpseWithArmor;
-        private const int ArmorPerFind = 5;
+        private readonly int corpseArmor;
         private Cache selected;
         private bool backpackOpen;
         private int medkits;
@@ -48,6 +48,7 @@ namespace Game.StreetMap
             this.hero = hero;
             this.near = near;
             this.corpseWithArmor = corpseWithArmor;
+            corpseArmor = corpseWithArmor == null ? 0 : RollArmorAmount(session, corpseWithArmor);
             int medkitBudget = 2;
             int armorBudget = corpseWithArmor == null ? 4 : 3;
             for (int i = 1; i < StreetMapLayout.Rooms.Count; i++)
@@ -98,14 +99,17 @@ namespace Game.StreetMap
         {
             if (budget <= 0 || session.Roll(key + "/armor", 100) >= 60) return 0;
             budget--;
-            return ArmorPerFind;
+            return RollArmorAmount(session, key);
         }
+
+        private static int RollArmorAmount(Stage5PreviewSession session, string key) =>
+            3 + session.Roll(key + "/armor-amount", 8);
 
         public int ArmorFromCorpse(string spawnId)
         {
             if (corpseWithArmor != spawnId) return 0;
             corpseWithArmor = null;
-            return ArmorPerFind;
+            return corpseArmor;
         }
 
         private void AddArmorSpot(Stage5PreviewController map, Stage5PreviewSession session, string key, string title,

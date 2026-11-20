@@ -412,24 +412,32 @@ namespace Game.Tests
             foreach (var car in cars)
             {
                 Park(body, Approach(car));
+                float armorBefore = map.Player.ReadSnapshot().Armor;
                 map.TryExit();
                 map.TryExit();
+                if (car == firstCar)
+                    Assert.That(map.Player.ReadSnapshot().Armor - armorBefore, Is.EqualTo(10));
                 Assert.That(FindPreviewButton("В рюкзак · E"), Is.Null);
             }
             Assert.That(map.Player.ReadSnapshot().Health, Is.EqualTo(90));
-            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(15));
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(21));
             yield return ClearPreviewRoom(map, body, 0);
             var corpseArmor = GameObject.Find("Броня в теле");
             Assert.That(corpseArmor, Is.Not.Null);
             Park(body, corpseArmor.transform.position);
             yield return Until(() => GameObject.Find("Подсказка NPC").GetComponent<Text>().text.Contains("Обыскать тело · Броня"));
-            Assert.That(map.Player.TryRepair(99), Is.EqualTo(15));
+            Assert.That(map.Player.TryRepair(99), Is.EqualTo(9));
             map.TryExit();
+            Assert.That(corpseArmor.activeSelf, Is.True);
+            yield return new WaitForSeconds(.55f);
+            Apply(map.Player.GetComponent<DamageReceiver>(), 2);
+            map.TryExit();
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(30));
             Assert.That(corpseArmor.activeSelf, Is.True);
             yield return new WaitForSeconds(.55f);
             Apply(map.Player.GetComponent<DamageReceiver>(), 5);
             map.TryExit();
-            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(30));
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(28), "The remaining three points must not reroll.");
             Assert.That(corpseArmor.activeSelf, Is.False);
             Assert.That(GameObject.Find("Подсветка двери машины"), Is.Null);
             Assert.That(GameObject.Find("Подсветка Бочка со снабжением"), Is.Null);
@@ -480,7 +488,7 @@ namespace Game.Tests
             Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(armor));
             Assert.That(GameObject.Find("Броня на земле"), Is.Not.Null);
             map.TryExit();
-            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(armor + 5));
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(armor + 3));
             Park(body, Stage5PreviewController.DealerRoad);
             preview.TryVisit();
             Park(body, arrival + Vector2.up * 4.2f);
