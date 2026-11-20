@@ -10,7 +10,7 @@ namespace Game.Input
         [SerializeField] private InputActionAsset actions;
         private InputActionAsset ownedActions;
         private InputActionMap map;
-        private InputAction move, attack, switchWeapon, interact, pause, dodge, npc;
+        private InputAction move, attack, switchWeapon, interact, pause, dodge, npc, backpack;
         private bool npcEnabled, visitingNpc, npcDialog;
         private Func<bool> atNpcPassage;
         private int sampledFrame = -1;
@@ -37,6 +37,7 @@ namespace Game.Input
             pause = map.FindAction("Pause", true);
             dodge = map.FindAction("Dodge");
             npc = map.FindAction("NpcInteraction");
+            backpack = map.FindAction("Backpack");
             sampledFrame = -1;
             RefreshEnabled();
         }
@@ -54,13 +55,15 @@ namespace Game.Input
             if (sampledFrame == Time.frameCount) return command;
             sampledFrame = Time.frameCount;
             bool passage = npcEnabled && atNpcPassage?.Invoke() == true;
-            bool npcPressed = npcEnabled && sampledFrame != inputResetFrame &&
+            bool openBackpack = npcEnabled && sampledFrame != inputResetFrame && backpack?.WasPressedThisFrame() == true;
+            bool npcPressed = npcEnabled && !openBackpack && sampledFrame != inputResetFrame &&
                 (npc?.WasPressedThisFrame() == true || (passage && attack.WasPressedThisFrame()));
-            bool canAttack = !visitingNpc && !npcPressed && !passage;
+            bool canAttack = !visitingNpc && !npcDialog && !npcPressed && !passage && !openBackpack;
             command = new PlayerCommand(npcDialog ? Vector2.zero : move.ReadValue<Vector2>(), canAttack && attack.IsPressed(),
-                !npcDialog && !npcPressed && switchWeapon.WasPressedThisFrame(), !npcPressed && interact.WasPressedThisFrame(),
+                !npcDialog && !npcPressed && !openBackpack && switchWeapon.WasPressedThisFrame(),
+                !npcPressed && !openBackpack && interact.WasPressedThisFrame(),
                 pause.WasPressedThisFrame(), canAttack && sampledFrame != inputResetFrame && dodge != null && dodge.WasPressedThisFrame(),
-                npcPressed);
+                npcPressed, openBackpack);
             return command;
         }
 

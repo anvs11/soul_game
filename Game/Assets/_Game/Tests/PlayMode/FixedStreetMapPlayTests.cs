@@ -230,6 +230,7 @@ namespace Game.Tests
             Assert.That(preview.Coins, Is.GreaterThanOrEqualTo(3));
             var ammo = GameObject.Find("Патроны в теле");
             Assert.That(ammo, Is.Not.Null);
+            Assert.That(ammo.GetComponentsInChildren<SpriteRenderer>().Length, Is.EqualTo(4));
             Park(body, ammo.transform.position);
             int reserve = map.Player.ReadSnapshot().ReserveAmmo;
             int bodies = map.GetComponentsInChildren<SpriteRenderer>().Count(sprite => sprite.name == "Тело зомби");
@@ -309,8 +310,8 @@ namespace Game.Tests
 
                 yield return ClearPreviewRoom(map, body, 1);
                 var medkit = GameObject.Find("Аптечка · подпись");
-                Assert.That(medkit, Is.Not.Null);
-                Assert.That(medkit.transform.position.x, Is.EqualTo(31f).Within(.1f));
+                Assert.That(medkit, Is.Null);
+                Assert.That(Object.FindObjectsByType<RoomPickup>(FindObjectsSortMode.None), Is.Empty);
                 Park(body, Stage5PreviewController.DealerRoad);
                 InputSystem.QueueStateEvent(pad, new GamepadState().WithButton(GamepadButton.East));
                 yield return Until(() => preview.IsInside);
@@ -348,6 +349,73 @@ namespace Game.Tests
         }
 
         [UnityTest]
+        public IEnumerator Stage5Preview_SearchesCarsAndKeepsOnlyMedkitsInTheBackpack()
+        {
+            var home = Object.FindFirstObjectByType<HomeScreen>();
+            home.FixedSeedInput.text = "11";
+            home.Stage5PreviewButton.onClick.Invoke();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.InArena);
+            var map = Object.FindFirstObjectByType<StreetMapScreen>();
+            var body = map.Player.GetComponent<Rigidbody2D>();
+            var cars = map.GetComponentsInChildren<BoxCollider2D>().Where(x => x.name == "Сгоревшая машина")
+                .OrderBy(x => x.transform.position.x).ThenBy(x => x.transform.position.y).ToArray();
+            Assert.That(cars.Length, Is.EqualTo(4));
+            var reachable = StreetMapCatalog.Reachable(.45f);
+            Assert.That(reachable.Contains(new Vector2Int(85, 24)), Is.True);
+            foreach (var room in StreetMapCatalog.Create().Rooms)
+            foreach (var point in room.Points)
+                Assert.That(Physics2D.OverlapCircle(new Vector2(room.CenterX + point.X, room.CenterY + point.Y),
+                    point.ClearanceRadius, LayerMask.GetMask("World")), Is.Null, point.PointId);
+            var firstRoom = StreetMapLayout.Rooms[1];
+            var secondRoom = StreetMapLayout.Rooms[2];
+            var firstCar = cars.Single(car => firstRoom.Bounds.Contains(Vector2Int.FloorToInt(car.transform.position)));
+            var secondCar = cars.Single(car => secondRoom.Bounds.Contains(Vector2Int.FloorToInt(car.transform.position)));
+            Vector2 Approach(BoxCollider2D car)
+            {
+                Vector2 point = car.transform.position;
+                var room = StreetMapLayout.Rooms.Single(r => r.Bounds.Contains(Vector2Int.FloorToInt(point)));
+                return point + Vector2.right * Mathf.Sign(room.Center.x - point.x) * 1.14f;
+            }
+
+            Park(body, Approach(firstCar));
+            map.TryExit();
+            yield return Until(() => FindPreviewButton("В рюкзак · E") != null);
+            Assert.That(FindPreviewButton("Применить · Tab").interactable, Is.False);
+            var store = FindPreviewButton("В рюкзак · E");
+            store.onClick.Invoke();
+            store.onClick.Invoke();
+            Assert.That(map.Player.ReadSnapshot().Health, Is.EqualTo(100));
+            yield return Until(() => FindPreviewButton("Рюкзак · B · 1") != null);
+
+            Apply(map.Player.GetComponent<DamageReceiver>(), 60);
+            FindPreviewButton("Рюкзак · B · 1").onClick.Invoke();
+            yield return Until(() => FindPreviewButton("Применить · Tab") != null);
+            Assert.That(FindPreviewButton("В рюкзак · E"), Is.Null);
+            FindPreviewButton("Применить · Tab").onClick.Invoke();
+            Assert.That(map.Player.ReadSnapshot().Health, Is.EqualTo(80));
+            FindPreviewButton("Закрыть · B").onClick.Invoke();
+
+            Park(body, Approach(secondCar));
+            map.TryExit();
+            yield return Until(() => FindPreviewButton("В рюкзак · E") != null);
+            FindPreviewButton("Применить · Tab").onClick.Invoke();
+            Assert.That(map.Player.ReadSnapshot().Health, Is.EqualTo(90));
+            yield return Until(() => FindPreviewButton("Рюкзак · B · 0") != null);
+            foreach (var car in cars)
+            {
+                Park(body, Approach(car));
+                map.TryExit();
+                map.TryExit();
+                Assert.That(FindPreviewButton("В рюкзак · E"), Is.Null);
+            }
+            Assert.That(map.Player.ReadSnapshot().Health, Is.EqualTo(90));
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(4));
+            Assert.That(GameObject.Find("Подсветка двери машины"), Is.Null);
+            Assert.That(GameObject.Find("Подсветка Бочка со снабжением"), Is.Null);
+            Assert.That(GameObject.Find("Подсветка Металлолом у входа"), Is.Null);
+        }
+
+        [UnityTest]
         public IEnumerator Stage5Preview_DealerRejectsAnEmptyWalletAndCanGiveAHarmfulBottle()
         {
             var home = Object.FindFirstObjectByType<HomeScreen>();
@@ -357,6 +425,16 @@ namespace Game.Tests
             var map = Object.FindFirstObjectByType<StreetMapScreen>();
             var preview = map.GetComponent<Stage5PreviewController>();
             var body = map.Player.GetComponent<Rigidbody2D>();
+            var scrap = GameObject.Find("Подсветка Металлолом у входа");
+            var barrel = GameObject.Find("Подсветка Бочка со снабжением");
+            Assert.That(scrap, Is.Not.Null);
+            Assert.That(barrel, Is.Not.Null);
+            Park(body, scrap.transform.position);
+            map.TryExit();
+            Assert.That(scrap.activeSelf, Is.True, "Full armor must leave the item available.");
+            Apply(map.Player.GetComponent<DamageReceiver>(), 5);
+            map.TryExit();
+            Assert.That(scrap.activeSelf, Is.False);
             Park(body, Stage5PreviewController.DealerRoad);
             preview.TryVisit();
             Vector2 arrival = body.position;
@@ -373,6 +451,11 @@ namespace Game.Tests
 
             yield return ClearPreviewRoom(map, body, 0);
             yield return ClearPreviewRoom(map, body, 1);
+            float armor = map.Player.ReadSnapshot().Armor;
+            Park(body, (Vector2)barrel.transform.position + Vector2.right * .72f);
+            map.TryExit();
+            Assert.That(barrel.activeSelf, Is.False);
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(armor + 1));
             Park(body, Stage5PreviewController.DealerRoad);
             preview.TryVisit();
             Park(body, arrival + Vector2.up * 4.2f);

@@ -8,8 +8,12 @@ namespace Game.UI
     {
         private readonly Text balance, prompt, effect, offer, error;
         private readonly RectTransform dialog;
+        private readonly RectTransform supplyPanel;
+        private readonly Text supplyTitle, backpackLabel;
+        private readonly Button applyMedkit, storeMedkit;
 
-        public Stage5PreviewView(RectTransform safe, Action accept, Action decline)
+        public Stage5PreviewView(RectTransform safe, Action accept, Action decline,
+            Action backpack, Action apply, Action store, Action closeSupply)
         {
             balance = Label("Баланс", safe, Vector2.up * -28, new Vector2(390, 47), 17);
             balance.rectTransform.anchorMin = balance.rectTransform.anchorMax = new Vector2(.5f, 1);
@@ -24,12 +28,36 @@ namespace Game.UI
             Button("Согласиться · Tab", dialog, new Vector2(0, -42), accept);
             Button("Отказаться · E", dialog, new Vector2(0, -103), decline);
             dialog.gameObject.SetActive(false);
+
+            var backpackButton = Button("Рюкзак · B", safe, Vector2.down * 113, backpack);
+            var backpackRect = (RectTransform)backpackButton.transform;
+            backpackRect.anchorMin = backpackRect.anchorMax = new Vector2(.5f, 1);
+            backpackRect.sizeDelta = new Vector2(220, 38);
+            backpackLabel = backpackButton.GetComponentInChildren<Text>();
+            supplyPanel = Panel("Аптечки", safe);
+            supplyTitle = Label("Найденное снабжение", supplyPanel, Vector2.up * 103, new Vector2(420, 65), 24);
+            applyMedkit = Button("Применить · Tab", supplyPanel, Vector2.up * 27, apply);
+            storeMedkit = Button("В рюкзак · E", supplyPanel, Vector2.down * 36, store);
+            Button("Закрыть · B", supplyPanel, Vector2.down * 101, closeSupply);
+            supplyPanel.gameObject.SetActive(false);
+        }
+
+        public void RenderSupplies(bool visible, bool open, bool found, int medkits, bool canHeal)
+        {
+            backpackLabel.transform.parent.gameObject.SetActive(visible);
+            backpackLabel.text = $"Рюкзак · B · {medkits}";
+            supplyPanel.gameObject.SetActive(visible && open);
+            supplyTitle.text = found ? "Найдена аптечка на 10 HP" : $"В рюкзаке аптечек: {medkits}";
+            applyMedkit.interactable = canHeal;
+            storeMedkit.gameObject.SetActive(found);
         }
 
         public void Render(int coins, int pending, int confirmed, string hint, string effects, string question, string notice)
         {
             balance.text = $"Монеты {coins}   ·   Кристаллы {confirmed}" + (pending > 0 ? $"  (+{pending})" : "");
-            prompt.text = question == null ? notice ?? hint : "";
+            prompt.text = question == null && !supplyPanel.gameObject.activeSelf
+                ? string.IsNullOrEmpty(hint) ? notice : string.IsNullOrEmpty(notice) ? hint : hint + "\n" + notice
+                : "";
             effect.text = effects;
             dialog.gameObject.SetActive(question != null);
             offer.text = question;

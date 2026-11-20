@@ -223,18 +223,12 @@ namespace Game.StreetMap
             if (run == null || room.RunId != run.RunId || !cleared.Add(room.RoomId)) return;
             preview?.CompleteRoom(room.RoomId);
             UpdateRoomLabel();
-            if (combatAssets != null)
+            if (combatAssets != null && preview == null)
             {
                 int index = Array.IndexOf(Rooms, room);
                 var layout = StreetMapLayout.Rooms[index + 1];
                 Vector2 center = layout.Center;
-                if (preview != null)
-                {
-                    var supply = new Vector2(layout.Bounds.xMax - 2f, center.y + 2.5f);
-                    if (index == 1 || index == 3) Drop(room, PickupKind.Health, supply);
-                    if (index >= 2) Drop(room, PickupKind.Armor, supply + Vector2.up * (index == 3 ? 1.7f : 0));
-                }
-                else if (index < 3) Drop(room, (PickupKind)index, center);
+                if (index < 3) Drop(room, (PickupKind)index, center);
                 else
                 {
                     Drop(room, PickupKind.Ammo, center + Vector2.left * 2f);
@@ -249,9 +243,6 @@ namespace Game.StreetMap
         {
             var pickup = combatAssets.CreatePickup(kind, position, transform);
             pickup.Initialize(room.RunId, room.RoomId);
-            if (preview != null)
-                Stage5PreviewController.WorldLabel(pickup.transform, position + Vector2.up * .72f,
-                    kind == PickupKind.Health ? "Аптечка" : "Ремкомплект");
             pickups.Add(pickup);
         }
         private bool TryPickup()
@@ -278,7 +269,7 @@ namespace Game.StreetMap
         {
             string text="1-1 · "+CurrentRoomId+" · пройдено "+ClearedCount+"/4";
             if (CurrentRoomId == "elite" && combatAssets == null) text += "\nПроверочный бой";
-            else if (combatAssets != null && cleared.Contains(CurrentRoomId)) text += "\nE рядом с предметом: подобрать";
+            else if (combatAssets != null && preview == null && cleared.Contains(CurrentRoomId)) text += "\nE рядом с предметом: подобрать";
             if (Rooms!=null) foreach (var room in Rooms)
                 if (room.RoomId==CurrentRoomId)
                     text+="\n"+(room.State.Phase==RoomPhase.Cleared ? "Проходы открыты" : "Живых: "+room.State.AliveCount+" · ожидается: "+room.State.PendingCount);

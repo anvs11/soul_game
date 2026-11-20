@@ -19,6 +19,7 @@ namespace Game.Actors
         public event Action Died;
         public event Action InteractRequested;
         public event Action NpcRequested;
+        public event Action BackpackRequested;
         public event Action PauseRequested;
         private bool CanCollect => isActiveAndEnabled && controlsEnabled && Time.timeScale > 0f && !IsDead;
         public int TryAddReserve(int amount)
@@ -108,6 +109,7 @@ namespace Game.Actors
             if (command.PausePressed) PauseRequested?.Invoke();
             if (controlsEnabled && !IsDead && command.InteractPressed) InteractRequested?.Invoke();
             if (controlsEnabled && !IsDead && command.NpcPressed) NpcRequested?.Invoke();
+            if (controlsEnabled && !IsDead && command.BackpackPressed) BackpackRequested?.Invoke();
         }
     }
 }

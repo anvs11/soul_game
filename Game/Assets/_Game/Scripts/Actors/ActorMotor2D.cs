@@ -82,7 +82,8 @@ namespace Game.Actors
                 permissions.CanAttack && command.AttackHeld, permissions.CanSwitchWeapon && command.SwitchPressed,
                 CombatActive && Time.timeScale > 0 && command.InteractPressed, command.PausePressed,
                 beforeDodge.CanDodge && command.DodgePressed,
-                CombatActive && Time.timeScale > 0 && command.NpcPressed);
+                CombatActive && Time.timeScale > 0 && command.NpcPressed,
+                CombatActive && Time.timeScale > 0 && command.BackpackPressed);
             CommandSampled?.Invoke(CurrentCommand);
         }
 

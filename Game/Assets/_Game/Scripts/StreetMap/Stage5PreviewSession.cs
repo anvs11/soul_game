@@ -146,7 +146,7 @@ namespace Game.StreetMap
             Modification = null;
         }
 
-        private int Roll(string key, int bound)
+        internal int Roll(string key, int bound)
         {
             unchecked
             {

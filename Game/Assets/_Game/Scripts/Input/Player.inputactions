@@ -67,6 +67,15 @@
           "processors": "",
           "interactions": "",
           "initialStateCheck": false
+        },
+        {
+          "name": "Backpack",
+          "type": "Button",
+          "id": "e96479b8-4853-443c-84bd-71472adf94c9",
+          "expectedControlType": "Button",
+          "processors": "",
+          "interactions": "",
+          "initialStateCheck": false
         }
       ],
       "bindings": [
@@ -320,6 +329,28 @@
           "processors": "",
           "groups": "",
           "action": "NpcInteraction",
+          "isComposite": false,
+          "isPartOfComposite": false
+        },
+        {
+          "name": "",
+          "id": "b055c3f4-896a-8a3a-ae42-423b96923880",
+          "path": "<Keyboard>/b",
+          "interactions": "",
+          "processors": "",
+          "groups": "",
+          "action": "Backpack",
+          "isComposite": false,
+          "isPartOfComposite": false
+        },
+        {
+          "name": "",
+          "id": "18ef0486-b2c2-4d52-8803-2ecd465b0e9e",
+          "path": "<Gamepad>/dpad/down",
+          "interactions": "",
+          "processors": "",
+          "groups": "",
+          "action": "Backpack",
           "isComposite": false,
           "isPartOfComposite": false
         }

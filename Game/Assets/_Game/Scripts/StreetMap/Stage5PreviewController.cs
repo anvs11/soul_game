@@ -49,6 +49,7 @@ namespace Game.StreetMap
         private PlayerCombatFacade hero;
         private Stage5PreviewSession session;
         private Stage5PreviewView view;
+        private Stage5Supplies supplies;
         private BattleControls battleControls;
         private BoundedFollowCamera cameraFollow;
         private Rigidbody2D body;
@@ -76,10 +77,12 @@ namespace Game.StreetMap
             sprite = hero.GetComponent<SpriteRenderer>().sprite;
             foreach (var candidate in FindObjectsByType<BoundedFollowCamera>(FindObjectsSortMode.None))
                 if (candidate.gameObject.scene == gameObject.scene) cameraFollow = candidate;
-            view = new Stage5PreviewView(controls.SafeRoot, Accept, Decline);
+            supplies = new Stage5Supplies(this, session, hero, Near);
+            view = new Stage5PreviewView(controls.SafeRoot, Accept, Decline, ToggleBackpack, ApplyMedkit, StoreMedkit, CloseSupplies);
             input?.SetNpcContext(true, false, false);
             input?.SetNpcPassage(AtPassage);
             hero.NpcRequested += TryVisit;
+            hero.BackpackRequested += ToggleBackpack;
 
             // Four named replay fixtures. Role 1 supplies the real placement plan.
             int layout = (int)((uint)run.CurrentRequest.Seed % 4);
@@ -140,7 +143,7 @@ namespace Game.StreetMap
             }
         }
 
-        private GameObject Tile(string label, Vector2 position, Vector2 size, Color color, int order)
+        internal GameObject Tile(string label, Vector2 position, Vector2 size, Color color, int order)
         {
             var tile = new GameObject(label);
             tile.transform.SetParent(transform, false);
@@ -151,6 +154,24 @@ namespace Game.StreetMap
             renderer.color = color;
             renderer.sortingOrder = order;
             return tile;
+        }
+
+        internal GameObject Outline(string label, Vector2 position, Vector2 size, float angle = 0)
+        {
+            const float width = .055f;
+            var highlight = new GameObject(label);
+            highlight.transform.SetParent(transform, false);
+            highlight.transform.position = position;
+            var tint = new Color(.85f, .96f, .80f);
+            for (int sign = -1; sign <= 1; sign += 2)
+            {
+                Tile("Контур", position + Vector2.up * (sign * size.y / 2f), new Vector2(size.x + width, width), tint, 3)
+                    .transform.SetParent(highlight.transform, true);
+                Tile("Контур", position + Vector2.right * (sign * size.x / 2f), new Vector2(width, size.y + width), tint, 3)
+                    .transform.SetParent(highlight.transform, true);
+            }
+            highlight.transform.rotation = Quaternion.Euler(0, 0, angle);
+            return highlight;
         }
 
         internal static void WorldLabel(Transform parent, Vector2 position, string label)
@@ -184,7 +205,7 @@ namespace Game.StreetMap
             corpse.transform.rotation = Quaternion.Euler(0, 0, -24f);
             if (ammo > 0)
             {
-                var marker = Tile("Патроны в теле", position, new Vector2(.20f, .13f), new Color(.72f, .83f, .92f), 1);
+                var marker = Outline("Патроны в теле", position, new Vector2(.96f, .43f), -24f);
                 bodies.Add(new BodyLoot { Body = corpse, Marker = marker, Ammo = ammo });
             }
             Drop(room.RoomId, position, PreviewLoot.Coins, coins, new Color(.99f, .76f, .19f));
@@ -233,6 +254,12 @@ namespace Game.StreetMap
 
         internal bool TryUseInteract()
         {
+            if (supplies.Open)
+            {
+                if (supplies.FoundMedkit) StoreMedkit();
+                else CloseSupplies();
+                return true;
+            }
             if (IsInside)
             {
                 if (offerOpen) Decline();
@@ -241,7 +268,13 @@ namespace Game.StreetMap
             }
             if (AtPassage()) { TryVisit(); return true; }
             var corpse = NearbyBody();
-            if (corpse == null) return false;
+            if (corpse == null)
+            {
+                if (!supplies.Search(body.position)) return false;
+                notice = supplies.Open ? null : supplies.Notice;
+                SyncSupplyInput();
+                return true;
+            }
             int accepted = hero.TryAddReserve(corpse.Ammo);
             if (accepted == 0) { notice = "Резерв патронов полон"; return true; }
             corpse.Ammo -= accepted;
@@ -278,12 +311,13 @@ namespace Game.StreetMap
         }
 
         private static Vector2 Exit(Stop stop) => stop.Interior + Vector2.down * 4f;
-        private bool AtPassage() => CanInteract && !offerOpen &&
+        private bool AtPassage() => CanInteract && !offerOpen && !supplies.Open &&
             (inside == null ? NearbyEntrance() != null : Near(Exit(inside), 1.3f));
 
         public void TryVisit()
         {
             if (!CanInteract) return;
+            if (supplies.Open) { ApplyMedkit(); return; }
             if (inside == null)
             {
                 var destination = NearbyEntrance();
@@ -319,6 +353,44 @@ namespace Game.StreetMap
                 offerOpen = true;
                 input?.SetNpcContext(true, true, true);
             }
+        }
+
+        private void ToggleBackpack()
+        {
+            if (!CanInteract || offerOpen) return;
+            supplies.ToggleBackpack();
+            SyncSupplyInput();
+        }
+
+        private void ApplyMedkit()
+        {
+            if (!CanInteract || !supplies.CanHeal) return;
+            supplies.Apply();
+            notice = supplies.Notice;
+            SyncSupplyInput();
+        }
+
+        private void StoreMedkit()
+        {
+            if (!CanInteract || !supplies.FoundMedkit) return;
+            supplies.Store();
+            notice = null;
+            SyncSupplyInput();
+        }
+
+        private void CloseSupplies()
+        {
+            if (!CanInteract) return;
+            supplies.Close();
+            SyncSupplyInput();
+        }
+
+        private void SyncSupplyInput()
+        {
+            screen.ReleaseHeldControls();
+            hero.GetComponent<PlayerDodgeController>()?.CancelMotion();
+            body.linearVelocity = Vector2.zero;
+            input?.SetNpcContext(true, IsInside, supplies.Open);
         }
 
         private void MoveHero(Vector2 position, Rect bounds)
@@ -370,6 +442,8 @@ namespace Game.StreetMap
             var corpse = CanInteract && inside == null && stop == null ? NearbyBody() : null;
             if (corpse == null && notice == "Резерв патронов полон") notice = null;
             if (corpse != null) hint = "E · Обыскать тело";
+            if (inside == null && stop == null && corpse == null && CanInteract)
+                hint = supplies.Prompt(body.position) ?? "";
             if (inside == null && stop != null) hint = "Space / Tab / E · Пройти";
             if (inside != null)
             {
@@ -389,7 +463,9 @@ namespace Game.StreetMap
                 ? session.Beneficial ? "Пузырёк: ускорение (макет)" : "Пузырёк: замедление (макет)"
                 : "";
             if (session.Modification != null) effect += " " + session.Modification + " (макет)";
-            view.Render(Coins, PendingCrystals, ConfirmedCrystals, hint, effect,
+            view.RenderSupplies(CanInteract && !offerOpen, supplies.Open, supplies.FoundMedkit,
+                supplies.BackpackMedkits, supplies.CanHeal);
+            view.Render(Coins, PendingCrystals, ConfirmedCrystals, supplies.Open ? "" : hint, effect,
                 CanInteract && offerOpen ? inside.Name + "\n" + (inside.Kind == PreviewNpc.Broker
                     ? $"Улучшить оружие за {inside.Price} монет?" : $"Купить пузырёк за {inside.Price} монет?") : null, notice);
         }
@@ -398,7 +474,11 @@ namespace Game.StreetMap
 
         private void OnDestroy()
         {
-            if (hero != null) hero.NpcRequested -= TryVisit;
+            if (hero != null)
+            {
+                hero.NpcRequested -= TryVisit;
+                hero.BackpackRequested -= ToggleBackpack;
+            }
             if (input != null)
             {
                 input.SetNpcPassage(null);
