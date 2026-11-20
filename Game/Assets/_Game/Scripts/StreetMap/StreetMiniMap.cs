@@ -41,7 +41,7 @@ namespace Game.StreetMap
         {
             if(source==null || marker==null)return;
             if(lastSafe!=Screen.safeArea)ApplySafe();
-            marker.anchoredPosition=Project(source.Player.transform.position);
+            marker.anchoredPosition=Project(source.MiniMapPosition);
             for(int i=0;i<rooms.Length;i++) rooms[i].color=source.HasVisited(i)?new Color(.25f,.7f,.6f):new Color(.35f,.4f,.45f);
         }
         private void ApplySafe()

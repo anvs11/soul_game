@@ -24,6 +24,7 @@ namespace Game.StreetMap
         public string RoomId => room.RoomId;
         public IReadOnlyList<DoorController> Doors => doors;
         public event Action<RoomController> Cleared;
+        public event Action<RoomController, string, string, Vector2> EnemyDefeated;
 
         public void Configure(string runId, EncounterRoom description, RoomPlan plan, PlayerCombatFacade player, TargetRegistry registry, MonoBehaviour[] actors, DoorController[] gates, Stage4CombatAssets combatAssets = null)
         {
@@ -170,7 +171,20 @@ namespace Game.StreetMap
         private void ObserveDeath(string id)
         {
             if (!bindings.TryGetValue(id,out var binding) || !(binding.Target is MonoBehaviour component) || component == null || !binding.Target.IsDead) return;
-            if (State.ConfirmDeath(id)) { binding.Target.Died -= binding.Died; PublishClear(); }
+            if (!State.ConfirmDeath(id)) return;
+            binding.Target.Died -= binding.Died;
+            if (EnemyDefeated != null)
+            {
+                string type = component switch
+                {
+                    EliteEnemy elite => elite.EnemyTypeId,
+                    JumpingEnemy _ => EnemyTypes.Jumper,
+                    ShootingEnemy _ => EnemyTypes.Shooter,
+                    _ => EnemyTypes.Melee
+                };
+                EnemyDefeated(this, id, type, component.transform.position);
+            }
+            PublishClear();
         }
         public bool TryMaterializeSummon(string ownerSpawnId,int index,IEnemyTarget target)
         {

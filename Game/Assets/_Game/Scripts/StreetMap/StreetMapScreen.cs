@@ -35,6 +35,9 @@ namespace Game.StreetMap
         private Stage4CombatAssets combatAssets;
         private readonly List<RoomPickup> pickups = new List<RoomPickup>();
         public bool IsCombatReady => combatAssets != null;
+        private Stage5PreviewController preview;
+        internal Vector2 MiniMapPosition => preview != null ? preview.MapPosition : (Vector2)player.transform.position;
+        internal void ReleaseHeldControls() => controls.ClearHeld();
         protected override bool ShowView => false;
         protected override string Title => "";
         protected override string Description => "";
@@ -71,7 +74,12 @@ namespace Game.StreetMap
             var portal=new GameObject("FinalPortal");portal.transform.SetParent(transform,false);
             Portal=portal.AddComponent<FixedMapPortal>();Portal.Initialize(player.GetComponent<SpriteRenderer>().sprite);
             controls = GetComponent<BattleControls>() ?? gameObject.AddComponent<BattleControls>();
-            controls.Initialize(TogglePause, Resume, Leave, enableDodge: true);
+            controls.Initialize(TogglePause, Resume, Leave, enableDodge: true, enableNpc: value.CurrentRequest.IsStage5Preview);
+            if (value.CurrentRequest.IsStage5Preview)
+            {
+                preview = gameObject.AddComponent<Stage5PreviewController>();
+                preview.Initialize(this, value, controls);
+            }
             if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = false;
             player.Died += OnPlayerDied;
             player.PauseRequested += TogglePause;
@@ -213,6 +221,7 @@ namespace Game.StreetMap
         private void OnRoomCleared(RoomController room)
         {
             if (run == null || room.RunId != run.RunId || !cleared.Add(room.RoomId)) return;
+            preview?.CompleteRoom(room.RoomId);
             UpdateRoomLabel();
             if (combatAssets != null)
             {
@@ -231,6 +240,7 @@ namespace Game.StreetMap
         }
         private void Drop(RoomController room, PickupKind kind, Vector2 position)
         {
+            if (preview != null && kind == PickupKind.Ammo) return;
             var pickup = combatAssets.CreatePickup(kind, position, transform);
             pickup.Initialize(room.RunId, room.RoomId);
             pickups.Add(pickup);
@@ -269,7 +279,7 @@ namespace Game.StreetMap
         public void TryExit()
         {
             if(run==null || run.Phase!=RunPhase.InArena || IsPaused || player.IsDead)return;
-            if (TryPickup() || ClearedCount != 4) return;
+            if ((preview != null && preview.TryUseInteract()) || TryPickup() || ClearedCount != 4) return;
             if(!Portal.TryOpen(player)){UpdateRoomLabel();return;}
             UpdateRoomLabel();
             if(Vector2.Distance(player.transform.position,Portal.transform.position)>1.5f)return;
@@ -303,6 +313,7 @@ namespace Game.StreetMap
             bool active = run != null && run.Phase == RunPhase.InArena && !player.IsDead;
             player.SetControlsEnabled(active);
             if (active) return;
+            if (run.Phase == RunPhase.ReturningHome && run.LastOutcome.HasValue) preview?.Finish();
             if (run.Phase != RunPhase.LoadingArena) CancelRooms();
             controls?.ClearHeld(); IsPaused = false; Time.timeScale = 1;
             foreach (var enemy in enemies) if (enemy != null) enemy.gameObject.SetActive(false);

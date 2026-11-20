@@ -16,6 +16,9 @@ namespace Game.UI
         private RunCoordinator boundRun;
         public Button FixedStreetButton { get; private set; }
         public Button SeededStreetButton { get; private set; }
+        public Button Stage5PreviewButton { get; private set; }
+        private Button stage5ProfileButton;
+        private RectTransform stage5ProfilePanel;
         public InputField FixedSeedInput { get; private set; }
         private RunOutcome? outcome;
         private string streetError = "";
@@ -26,7 +29,8 @@ namespace Game.UI
         protected override string Title => IsShowingResult
             ? (fixedStreet ? "1-1: " + OutcomeLabel : diagnostic ? "Stage 2: проверка завершена" : outcome==RunOutcome.Victory ? (stage2 ? "Stage 2: победа" : "Победа") : outcome==RunOutcome.Defeat ? "Поражение" : "Вылазка завершена") : "Убежище";
         protected override string Description => IsShowingResult
-            ? (diagnostic ? "Диагностическая арена, без босса и наград. Итог: " + OutcomeLabel : "Попытка завершена. Награды на этом этапе не начисляются.")
+            && boundRun.CurrentRequest.IsStage5Preview ? Stage5Result()
+            : IsShowingResult ? (diagnostic ? "Диагностическая арена, без босса и наград. Итог: " + OutcomeLabel : "Попытка завершена. Награды на этом этапе не начисляются.")
             : "Зачистите арену, подойдите к выходу и нажмите E.";
         private string OutcomeLabel => outcome==RunOutcome.Victory ? "зачистка" : outcome==RunOutcome.Defeat ? "гибель героя" : "выход домой";
         protected override string ButtonLabel => IsShowingResult ? "В убежище" : "Начать вылазку";
@@ -62,6 +66,11 @@ namespace Game.UI
                 FixedSeedInput = CreateSeedField(panel, font, "FixedSeed", new Vector2(0, 240), 205, 55);
                 FixedStreetButton = CreateMapButton(panel, font, "Тестовый маршрут 1-1", new Vector2(220, 240), 210,
                     () => boundRun.StartRun(RunRequest.FixedStreet1_1()));
+                Stage5PreviewButton = CreateMapButton(panel, font, "Проверка Stage 5", new Vector2(-230, 307), 210,
+                    () => StartSeededStreet(true));
+                stage5ProfileButton = CreateMapButton(panel, font, "Профиль Stage 5", new Vector2(220, 307), 210,
+                    () => stage5ProfilePanel.gameObject.SetActive(!stage5ProfilePanel.gameObject.activeSelf));
+                CreatePreviewProfile(panel);
             }
             if (StreetButton != null) SeedInput = CreateSeedField(panel, font, "StreetSeed", new Vector2(205, -320), 190, 65);
         }
@@ -98,6 +107,12 @@ namespace Game.UI
                 FixedStreetButton.interactable = boundRun.Phase == RunPhase.Home;
                 SeededStreetButton.interactable = FixedStreetButton.interactable;
                 FixedSeedInput.interactable = FixedStreetButton.interactable;
+                Stage5PreviewButton.gameObject.SetActive(visible);
+                stage5ProfileButton.gameObject.SetActive(visible);
+                Stage5PreviewButton.interactable = FixedStreetButton.interactable &&
+                    Stage5PreviewProfile.For(boundRun).Scenario != PreviewProfileScenario.FutureSchema;
+                stage5ProfileButton.interactable = FixedStreetButton.interactable;
+                if (!visible || !FixedStreetButton.interactable) stage5ProfilePanel.gameObject.SetActive(false);
             }
         }
         private Button CreateMapButton(Transform panel, Font font, string title, Vector2 pos, float width, Action start)
@@ -124,8 +139,56 @@ namespace Game.UI
             });
             return button;
         }
-        private void StartSeededStreet()
+        private void StartSeededStreet() => StartSeededStreet(false);
+
+        private string Stage5Result()
         {
+            var profile = Stage5PreviewProfile.For(boundRun);
+            return $"Подтверждено за попытку: {profile.LastCrystals} кристаллов\n" +
+                $"Монеты при завершении: {profile.LastCoins} · баланс в убежище: {profile.Crystals} (макет)";
+        }
+
+        private void CreatePreviewProfile(Transform panel)
+        {
+            stage5ProfilePanel = Stage5PreviewView.Panel("Профиль Stage 5", panel);
+            var balance = Stage5PreviewView.Label("Кристаллы профиля", stage5ProfilePanel, Vector2.up * 120, new Vector2(440, 40), 22);
+            var scenario = Stage5PreviewView.Label("Состояние профиля", stage5ProfilePanel, Vector2.up * 72, new Vector2(440, 50), 18);
+            var notice = Stage5PreviewView.Label("Результат операции", stage5ProfilePanel, Vector2.up * 27, new Vector2(430, 45), 18);
+            var profile = Stage5PreviewProfile.For(boundRun);
+            Button purchase = null;
+            void RefreshProfile()
+            {
+                balance.text = profile.Summary;
+                scenario.text = profile.ScenarioLabel;
+                bool incompatible = profile.Scenario == PreviewProfileScenario.FutureSchema;
+                purchase.GetComponentInChildren<Text>().text = profile.Selected && !incompatible ? "Тестовый вариант выбран" : profile.PurchaseLabel;
+                purchase.interactable = incompatible || !profile.Selected;
+                Stage5PreviewButton.interactable = FixedStreetButton.interactable && !incompatible;
+            }
+            purchase = Stage5PreviewView.Button(profile.PurchaseLabel, stage5ProfilePanel, Vector2.down * 25, () =>
+            {
+                if (profile.Scenario == PreviewProfileScenario.FutureSchema)
+                {
+                    profile = profile.OpenSeparate();
+                    notice.text = "Создан отдельный тестовый профиль";
+                }
+                else notice.text = profile.PurchaseOrSelect();
+                RefreshProfile();
+            });
+            Stage5PreviewView.Button("Сменить сценарий профиля", stage5ProfilePanel, Vector2.down * 80, () =>
+            {
+                profile.AdvanceScenario();
+                notice.text = "";
+                RefreshProfile();
+            });
+            Stage5PreviewView.Button("Закрыть", stage5ProfilePanel, Vector2.down * 135, () => stage5ProfilePanel.gameObject.SetActive(false));
+            RefreshProfile();
+            stage5ProfilePanel.gameObject.SetActive(false);
+        }
+
+        private void StartSeededStreet(bool stage5Preview)
+        {
+            if (stage5Preview && Stage5PreviewProfile.For(boundRun).Scenario == PreviewProfileScenario.FutureSchema) return;
             int seed;
             if (string.IsNullOrWhiteSpace(FixedSeedInput.text)) seed = BitConverter.ToInt32(Guid.NewGuid().ToByteArray(), 0);
             else if (!int.TryParse(FixedSeedInput.text, NumberStyles.Integer, CultureInfo.InvariantCulture, out seed))
@@ -161,7 +224,7 @@ namespace Game.UI
                     string.Join(",", System.Linq.Enumerable.Select(room.Waves, wave => wave.WaveId + "@" +
                         wave.DelaySeconds.ToString(CultureInfo.InvariantCulture) + "=" +
                         string.Join("+", System.Linq.Enumerable.Select(wave.Spawns, spawn => spawn.SpawnId + "/" + spawn.EnemyTypeId + "@" + spawn.PointId)))))));
-            boundRun.StartRun(RunRequest.FixedStreet1_1(result.Plan));
+            boundRun.StartRun(stage5Preview ? RunRequest.Stage5Preview(result.Plan) : RunRequest.FixedStreet1_1(result.Plan));
         }
         protected override string SecondaryLabel => Application.CanStreamedLevelBeLoaded(ScenePaths.Stage2CombatSandbox)
             && Application.CanStreamedLevelBeLoaded(ScenePaths.Stage2BossSandbox)

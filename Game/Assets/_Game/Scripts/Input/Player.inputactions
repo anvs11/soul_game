@@ -58,6 +58,15 @@
           "processors": "",
           "interactions": "",
           "initialStateCheck": false
+        },
+        {
+          "name": "NpcInteraction",
+          "type": "Button",
+          "id": "8c3462c3-88d6-4898-89eb-c8ce23b570aa",
+          "expectedControlType": "Button",
+          "processors": "",
+          "interactions": "",
+          "initialStateCheck": false
         }
       ],
       "bindings": [
@@ -289,6 +298,28 @@
           "processors": "",
           "groups": "",
           "action": "Dodge",
+          "isComposite": false,
+          "isPartOfComposite": false
+        },
+        {
+          "name": "",
+          "id": "085b27bf-1c96-4b4b-858d-4008b46d0416",
+          "path": "<Keyboard>/tab",
+          "interactions": "",
+          "processors": "",
+          "groups": "",
+          "action": "NpcInteraction",
+          "isComposite": false,
+          "isPartOfComposite": false
+        },
+        {
+          "name": "",
+          "id": "b20eab5b-d19e-4ed4-8790-c959a4da196a",
+          "path": "<Gamepad>/buttonEast",
+          "interactions": "",
+          "processors": "",
+          "groups": "",
+          "action": "NpcInteraction",
           "isComposite": false,
           "isPartOfComposite": false
         }

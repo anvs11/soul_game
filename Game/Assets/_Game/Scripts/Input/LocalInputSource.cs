@@ -10,7 +10,8 @@ namespace Game.Input
         [SerializeField] private InputActionAsset actions;
         private InputActionAsset ownedActions;
         private InputActionMap map;
-        private InputAction move, attack, switchWeapon, interact, pause, dodge;
+        private InputAction move, attack, switchWeapon, interact, pause, dodge, npc;
+        private bool npcEnabled, visitingNpc, npcDialog;
         private int sampledFrame = -1;
         private int inputResetFrame = -1;
         private PlayerCommand command;
@@ -34,6 +35,7 @@ namespace Game.Input
             interact = map.FindAction("Interact", true);
             pause = map.FindAction("Pause", true);
             dodge = map.FindAction("Dodge");
+            npc = map.FindAction("NpcInteraction");
             sampledFrame = -1;
             RefreshEnabled();
         }
@@ -50,10 +52,20 @@ namespace Game.Input
             if (!isActiveAndEnabled || map == null || !map.enabled) return default;
             if (sampledFrame == Time.frameCount) return command;
             sampledFrame = Time.frameCount;
-            command = new PlayerCommand(move.ReadValue<Vector2>(), attack.IsPressed(),
-                switchWeapon.WasPressedThisFrame(), interact.WasPressedThisFrame(), pause.WasPressedThisFrame(),
-                dodgePressed: sampledFrame != inputResetFrame && dodge != null && dodge.WasPressedThisFrame());
+            bool npcPressed = npcEnabled && sampledFrame != inputResetFrame && npc != null && npc.WasPressedThisFrame();
+            bool canAttack = !visitingNpc && !npcPressed;
+            command = new PlayerCommand(npcDialog ? Vector2.zero : move.ReadValue<Vector2>(), canAttack && attack.IsPressed(),
+                !npcDialog && !npcPressed && switchWeapon.WasPressedThisFrame(), !npcPressed && interact.WasPressedThisFrame(),
+                pause.WasPressedThisFrame(), canAttack && sampledFrame != inputResetFrame && dodge != null && dodge.WasPressedThisFrame(),
+                npcPressed);
             return command;
+        }
+
+        internal void SetNpcContext(bool enabled, bool visiting, bool dialog)
+        {
+            npcEnabled = enabled;
+            visitingNpc = visiting;
+            npcDialog = dialog;
         }
 
         private void OnApplicationFocus(bool value) { if (focused == value) return; focused = value; RefreshEnabled(); }

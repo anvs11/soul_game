@@ -17,6 +17,7 @@ using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace Game.Tests
@@ -201,6 +202,249 @@ namespace Game.Tests
             var fresh = Object.FindFirstObjectByType<StreetMapScreen>().Player.GetComponent<PlayerDodgeController>();
             Assert.That(fresh.CooldownRemaining, Is.Zero);
             Assert.That(fresh.IsDodging, Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator Stage5Preview_VisitsBothStopsAndReturnsLootToHome()
+        {
+            var home = Object.FindFirstObjectByType<HomeScreen>();
+            home.FixedSeedInput.text = "11";
+            home.Stage5PreviewButton.onClick.Invoke();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.InArena);
+            var map = Object.FindFirstObjectByType<StreetMapScreen>();
+            var preview = map.GetComponent<Stage5PreviewController>();
+            var body = map.Player.GetComponent<Rigidbody2D>();
+            var controls = map.GetComponent<BattleControls>();
+            var input = map.Player.GetComponent<LocalInputSource>();
+            int checkpointBalance = preview.ConfirmedCrystals;
+
+            foreach (Vector2 road in new[] { Stage5PreviewController.BrokerRoad, Stage5PreviewController.DealerRoad })
+                Assert.That(Physics2D.OverlapCircle(road, .45f, LayerMask.GetMask("World")), Is.Null);
+            Assert.That(Object.FindObjectsByType<EventSystem>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
+            Assert.That(Object.FindObjectsByType<InputSystemUIInputModule>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
+            yield return ClearPreviewRoom(map, body, 0);
+            Assert.That(preview.ConfirmedCrystals, Is.GreaterThan(checkpointBalance));
+            Assert.That(preview.PendingCrystals, Is.Zero);
+            Assert.That(preview.Coins, Is.GreaterThanOrEqualTo(3));
+            var ammo = GameObject.Find("Магазин");
+            Assert.That(ammo, Is.Not.Null);
+            Park(body, ammo.transform.position);
+            int reserve = map.Player.ReadSnapshot().ReserveAmmo;
+            map.TryExit();
+            Assert.That(map.Player.ReadSnapshot().ReserveAmmo, Is.EqualTo(reserve + 8));
+
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var pad = InputSystem.AddDevice<Gamepad>();
+            var updateMode = InputSystem.settings.updateMode;
+            var background = InputSystem.settings.backgroundBehavior;
+            var editorInput = InputSystem.settings.editorInputBehaviorInPlayMode;
+            InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            InputSystem.settings.updateMode = InputSettings.UpdateMode.ProcessEventsManually;
+            InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            var pump = map.gameObject.AddComponent<MapTestInputPump>();
+            try
+            {
+                input.SendMessage("OnApplicationFocus", true);
+                input.SendMessage("OnApplicationPause", false);
+                if (map.IsPaused) map.Resume();
+                Park(body, Stage5PreviewController.BrokerRoad);
+                int rounds = map.Player.ReadSnapshot().Magazine;
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab, Key.Space));
+                yield return Until(() => preview.IsInside);
+                Assert.That(map.Player.ReadSnapshot().Magazine, Is.EqualTo(rounds));
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                yield return null;
+                yield return null;
+                Assert.That(map.MiniMap.HeroMapPosition, Is.EqualTo(StreetMiniMap.Project(Stage5PreviewController.BrokerRoad)));
+                Vector2 inside = body.position;
+                Assert.That(Object.FindFirstObjectByType<BoundedFollowCamera>().Bounds.Contains(inside), Is.True);
+                Park(body, inside + Vector2.up * 4.2f);
+                var npcPointer = new PointerEventData(EventSystem.current) { pointerId = 3 };
+                controls.Npc.OnPointerDown(npcPointer);
+                yield return Until(() => FindPreviewButton("Согласиться · Tab") != null);
+                controls.Npc.OnPointerUp(npcPointer);
+                yield return null;
+                int initialCoins = preview.Coins;
+                FindPreviewButton("Отказаться · E").onClick.Invoke();
+                Assert.That(preview.Coins, Is.EqualTo(initialCoins));
+                preview.TryVisit();
+                yield return null;
+                var agree = FindPreviewButton("Согласиться · Tab");
+                agree.onClick.Invoke();
+                agree.onClick.Invoke();
+                Assert.That(preview.Coins, Is.EqualTo(initialCoins - 3));
+                Assert.That(GameObject.Find("Усиление"), Is.Null);
+                Park(body, inside);
+                preview.TryVisit();
+                Assert.That(preview.IsInside, Is.False);
+                Assert.That(body.position, Is.EqualTo(Stage5PreviewController.BrokerRoad));
+                yield return new WaitForSeconds(2.1f);
+                Assert.That(GameObject.Find("Усиление"), Is.Not.Null);
+                preview.TryVisit();
+                Park(body, inside + Vector2.up * 4.2f);
+                map.TryExit();
+                Assert.That(GameObject.Find("Усиление"), Is.Null);
+                Park(body, inside);
+                preview.TryVisit();
+
+                yield return ClearPreviewRoom(map, body, 1);
+                Park(body, Stage5PreviewController.DealerRoad);
+                InputSystem.QueueStateEvent(pad, new GamepadState().WithButton(GamepadButton.East));
+                yield return Until(() => preview.IsInside);
+                InputSystem.QueueStateEvent(pad, new GamepadState());
+                yield return null;
+                Vector2 dealer = body.position;
+                Park(body, dealer + Vector2.up * 4.2f);
+                preview.TryVisit();
+                yield return null;
+                FindPreviewButton("Согласиться · Tab").onClick.Invoke();
+                Assert.That(GameObject.Find("Пузырёк Диллера"), Is.Not.Null);
+                map.TryExit();
+                Assert.That(GameObject.Find("Пузырёк Диллера"), Is.Null);
+                yield return Until(() => GameObject.Find("Эффекты").GetComponent<Text>().text.Contains("Пузырёк: ускорение"));
+                Park(body, dealer);
+                preview.TryVisit();
+                yield return ClearPreviewRoom(map, body, 2);
+                yield return Until(() => !GameObject.Find("Эффекты").GetComponent<Text>().text.Contains("Пузырёк"));
+            }
+            finally
+            {
+                pump.enabled = false;
+                InputSystem.RemoveDevice(keyboard);
+                InputSystem.RemoveDevice(pad);
+                InputSystem.settings.updateMode = updateMode;
+                InputSystem.settings.backgroundBehavior = background;
+                InputSystem.settings.editorInputBehaviorInPlayMode = editorInput;
+            }
+
+            int confirmed = preview.ConfirmedCrystals;
+            map.Leave();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
+            home = Object.FindFirstObjectByType<HomeScreen>();
+            Assert.That(home.GetComponentsInChildren<Text>().Any(t => t.text.Contains($"баланс в убежище: {confirmed}")), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator Stage5Preview_DealerRejectsAnEmptyWalletAndCanGiveAHarmfulBottle()
+        {
+            var home = Object.FindFirstObjectByType<HomeScreen>();
+            home.FixedSeedInput.text = "34";
+            home.Stage5PreviewButton.onClick.Invoke();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.InArena);
+            var map = Object.FindFirstObjectByType<StreetMapScreen>();
+            var preview = map.GetComponent<Stage5PreviewController>();
+            var body = map.Player.GetComponent<Rigidbody2D>();
+            Park(body, Stage5PreviewController.DealerRoad);
+            preview.TryVisit();
+            Vector2 arrival = body.position;
+            Park(body, arrival + Vector2.up * 4.2f);
+            preview.TryVisit();
+            yield return null;
+            FindPreviewButton("Согласиться · Tab").onClick.Invoke();
+            yield return Until(() => GameObject.Find("Ответ").GetComponent<Text>().text.Contains("Не хватает монет"));
+            Assert.That(GameObject.Find("Пузырёк Диллера"), Is.Null);
+            Assert.That(preview.Coins, Is.Zero);
+            map.TryExit();
+            Park(body, arrival);
+            preview.TryVisit();
+
+            yield return ClearPreviewRoom(map, body, 0);
+            yield return ClearPreviewRoom(map, body, 1);
+            Park(body, Stage5PreviewController.DealerRoad);
+            preview.TryVisit();
+            Park(body, arrival + Vector2.up * 4.2f);
+            preview.TryVisit();
+            yield return null;
+            FindPreviewButton("Согласиться · Tab").onClick.Invoke();
+            map.TryExit();
+            yield return Until(() => GameObject.Find("Эффекты").GetComponent<Text>().text.Contains("Пузырёк: замедление"));
+
+            var hit = new DamagePacket(-1, 999);
+            map.Player.GetComponent<DamageReceiver>().ApplyDamage(in hit);
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
+            Assert.That(boot.Coordinator.LastOutcome, Is.EqualTo(RunOutcome.Defeat));
+            home = Object.FindFirstObjectByType<HomeScreen>();
+            home.PrimaryButton.onClick.Invoke();
+            home.FixedSeedInput.text = "0";
+            home.Stage5PreviewButton.onClick.Invoke();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.InArena);
+            var reset = Object.FindFirstObjectByType<Stage5PreviewController>();
+            Assert.That(reset.Coins, Is.Zero);
+            Assert.That(reset.PendingCrystals, Is.Zero);
+            Assert.That(reset.ConfirmedCrystals, Is.GreaterThan(120));
+            Assert.That(GameObject.Find("Эффекты").GetComponent<Text>().text, Is.Empty);
+        }
+
+        [UnityTest]
+        public IEnumerator Stage5Preview_HomePurchaseRetriesAndDoesNotDoubleDebit()
+        {
+            var home = Object.FindFirstObjectByType<HomeScreen>();
+            FindPreviewButton("Профиль Stage 5").onClick.Invoke();
+            var scenario = FindPreviewButton("Сменить сценарий профиля");
+            var buy = FindPreviewButton("Открыть тестовый вариант · 100");
+            scenario.onClick.Invoke();
+            buy.onClick.Invoke();
+            var balance = GameObject.Find("Кристаллы профиля").GetComponent<Text>();
+            Assert.That(balance.text, Does.Contain("120"));
+            Assert.That(GameObject.Find("Результат операции").GetComponent<Text>().text, Does.Contain("Повторите"));
+            buy.onClick.Invoke();
+            buy.onClick.Invoke();
+            Assert.That(balance.text, Does.Contain(": 20"));
+            Assert.That(buy.GetComponentInChildren<Text>().text, Is.EqualTo("Тестовый вариант выбран"));
+            FindPreviewButton("Закрыть").onClick.Invoke();
+            home.FixedSeedInput.text = "0";
+            home.Stage5PreviewButton.onClick.Invoke();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.InArena);
+            var map = Object.FindFirstObjectByType<StreetMapScreen>();
+            var preview = map.GetComponent<Stage5PreviewController>();
+            Assert.That(preview.ConfirmedCrystals, Is.EqualTo(20));
+            Assert.That(preview.Coins, Is.Zero);
+            Park(map.Player.GetComponent<Rigidbody2D>(), Stage5PreviewController.BrokerRoad);
+            preview.TryVisit();
+            Assert.That(preview.IsInside, Is.False);
+            map.Leave();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
+            home = Object.FindFirstObjectByType<HomeScreen>();
+            home.PrimaryButton.onClick.Invoke();
+            FindPreviewButton("Профиль Stage 5").onClick.Invoke();
+            scenario = FindPreviewButton("Сменить сценарий профиля");
+            scenario.onClick.Invoke();
+            scenario.onClick.Invoke();
+            Assert.That(GameObject.Find("Состояние профиля").GetComponent<Text>().text, Does.Contain("резервной копии"));
+            scenario.onClick.Invoke();
+            Assert.That(home.Stage5PreviewButton.interactable, Is.False);
+            Assert.That(GameObject.Find("Кристаллы профиля").GetComponent<Text>().text, Does.Contain(": 20"));
+            FindPreviewButton("Открыть отдельный профиль").onClick.Invoke();
+            Assert.That(GameObject.Find("Кристаллы профиля").GetComponent<Text>().text, Does.Contain(": 0"));
+            Assert.That(home.Stage5PreviewButton.interactable, Is.True);
+        }
+
+        private static Button FindPreviewButton(string label) => Object.FindObjectsByType<Button>(FindObjectsSortMode.None)
+            .FirstOrDefault(b => b.GetComponentInChildren<Text>()?.text == label);
+
+        private static void Park(Rigidbody2D body, Vector2 position)
+        {
+            body.position = position;
+            body.transform.position = position;
+            Physics2D.SyncTransforms();
+        }
+
+        private static IEnumerator ClearPreviewRoom(StreetMapScreen map, Rigidbody2D body, int index)
+        {
+            Park(body, StreetMapLayout.Rooms[index + 1].Center);
+            var room = map.Rooms[index];
+            yield return Until(() => room.State.AliveCount == room.State.Plan.Waves[0].Spawns.Count);
+            var actors = Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                .Where(actor => actor is IEnemyTarget target && !target.IsDead).ToArray();
+            Assert.That(actors.Length, Is.InRange(6, 8));
+            foreach (var actor in actors)
+            {
+                Kill(actor);
+                Park(body, actor.transform.position);
+                yield return null;
+                yield return null;
+            }
+            Assert.That(room.State.Phase, Is.EqualTo(RoomPhase.Cleared));
         }
 
         [UnityTest]

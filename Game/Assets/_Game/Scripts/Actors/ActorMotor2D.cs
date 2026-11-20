@@ -81,7 +81,8 @@ namespace Game.Actors
             CurrentCommand = new PlayerCommand(permissions.CanMove ? command.Move : Vector2.zero,
                 permissions.CanAttack && command.AttackHeld, permissions.CanSwitchWeapon && command.SwitchPressed,
                 CombatActive && Time.timeScale > 0 && command.InteractPressed, command.PausePressed,
-                beforeDodge.CanDodge && command.DodgePressed);
+                beforeDodge.CanDodge && command.DodgePressed,
+                CombatActive && Time.timeScale > 0 && command.NpcPressed);
             CommandSampled?.Invoke(CurrentCommand);
         }
 

@@ -10,9 +10,10 @@ namespace Game.Input
         public bool InteractPressed { get; }
         public bool PausePressed { get; }
         public bool DodgePressed { get; }
+        public bool NpcPressed { get; }
 
         public PlayerCommand(Vector2 move, bool attackHeld = false, bool switchPressed = false,
-            bool interactPressed = false, bool pausePressed = false, bool dodgePressed = false)
+            bool interactPressed = false, bool pausePressed = false, bool dodgePressed = false, bool npcPressed = false)
         {
             Move = Vector2.ClampMagnitude(move, 1f);
             AttackHeld = attackHeld;
@@ -20,6 +21,7 @@ namespace Game.Input
             InteractPressed = interactPressed;
             PausePressed = pausePressed;
             DodgePressed = dodgePressed;
+            NpcPressed = npcPressed;
         }
     }
 

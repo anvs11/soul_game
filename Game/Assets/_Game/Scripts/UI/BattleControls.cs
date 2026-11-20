@@ -15,9 +15,11 @@ namespace Game.UI
         public OnScreenButton Attack { get; private set; }
         public OnScreenButton Dodge { get; private set; }
         public OnScreenButton PauseControl { get; private set; }
+        public OnScreenButton Npc { get; private set; }
+        internal RectTransform SafeRoot => safe;
         public Button ResumeButton { get; private set; }
         public Button HomeButton { get; private set; }
-        public void Initialize(Action pauseAction, Action resumeAction, Action leaveAction, bool enableDodge = false)
+        public void Initialize(Action pauseAction, Action resumeAction, Action leaveAction, bool enableDodge = false, bool enableNpc = false)
         {
             pause=pauseAction; resume=resumeAction; leave=leaveAction;
             if(safe!=null)return;
@@ -38,6 +40,8 @@ namespace Game.UI
                     new Vector2(120, 80), "<Gamepad>/rightShoulder");
             Control("Оружие",new Vector2(1,0),new Vector2(-245,190),new Vector2(110,80),"<Gamepad>/buttonNorth");
             Control("Взять / E",new Vector2(1,0),new Vector2(-245,80),new Vector2(110,80),"<Gamepad>/buttonWest");
+            if (enableNpc)
+                Npc = Control("НПС / Tab", new Vector2(1,0), new Vector2(-375,80), new Vector2(118,80), "<Gamepad>/buttonEast");
             PauseControl=Control("Пауза",new Vector2(1,1),new Vector2(-65,-45),new Vector2(100,60),"<Gamepad>/start");
             menu=Box("PauseMenu",safe,new Vector2(.5f,.5f),Vector2.zero,new Vector2(550,360),new Color(.04f,.08f,.09f,.98f)).gameObject;
             var title=Rect("Title",menu.transform); title.anchoredPosition=new Vector2(0,110); title.sizeDelta=new Vector2(450,70); TextLabel(title,"Пауза");
