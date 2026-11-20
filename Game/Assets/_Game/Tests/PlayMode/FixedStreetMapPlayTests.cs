@@ -303,6 +303,8 @@ namespace Game.Tests
                 Assert.That(GameObject.Find("Усиление"), Is.Not.Null);
                 preview.TryVisit();
                 Park(body, inside + Vector2.up * 4.2f);
+                yield return Until(() => GameObject.Find("Название находки")?.GetComponent<Text>().text == "Улучшенное дуло");
+                Assert.That(GameObject.Find("Описание находки").GetComponent<Text>().text, Does.Contain("+1 к урону"));
                 map.TryExit();
                 Assert.That(GameObject.Find("Усиление"), Is.Null);
                 Park(body, inside);
@@ -322,9 +324,11 @@ namespace Game.Tests
                 preview.TryVisit();
                 yield return null;
                 FindPreviewButton("Согласиться · Tab").onClick.Invoke();
-                Assert.That(GameObject.Find("Пузырёк Диллера"), Is.Not.Null);
+                Assert.That(GameObject.Find("Колба Диллера"), Is.Not.Null);
+                yield return Until(() => GameObject.Find("Название находки")?.GetComponent<Text>().text == "Колба Диллера");
+                Assert.That(GameObject.Find("Описание находки").GetComponent<Text>().text, Does.Contain("на ближайший бой"));
                 map.TryExit();
-                Assert.That(GameObject.Find("Пузырёк Диллера"), Is.Null);
+                Assert.That(GameObject.Find("Колба Диллера"), Is.Null);
                 yield return Until(() => GameObject.Find("Эффекты").GetComponent<Text>().text.Contains("Пузырёк: ускорение"));
                 Park(body, dealer);
                 preview.TryVisit();
@@ -386,6 +390,10 @@ namespace Game.Tests
             store.onClick.Invoke();
             Assert.That(map.Player.ReadSnapshot().Health, Is.EqualTo(100));
             yield return Until(() => FindPreviewButton("Рюкзак · B · 1") != null);
+            var droppedArmor = GameObject.Find("Броня на земле");
+            Assert.That(droppedArmor, Is.Not.Null, "A full armor bar must not prevent searching the car.");
+            map.TryExit();
+            Assert.That(droppedArmor.activeSelf, Is.True);
 
             Apply(map.Player.GetComponent<DamageReceiver>(), 60);
             FindPreviewButton("Рюкзак · B · 1").onClick.Invoke();
@@ -409,7 +417,20 @@ namespace Game.Tests
                 Assert.That(FindPreviewButton("В рюкзак · E"), Is.Null);
             }
             Assert.That(map.Player.ReadSnapshot().Health, Is.EqualTo(90));
-            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(4));
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(15));
+            yield return ClearPreviewRoom(map, body, 0);
+            var corpseArmor = GameObject.Find("Броня в теле");
+            Assert.That(corpseArmor, Is.Not.Null);
+            Park(body, corpseArmor.transform.position);
+            yield return Until(() => GameObject.Find("Подсказка NPC").GetComponent<Text>().text.Contains("Обыскать тело · Броня"));
+            Assert.That(map.Player.TryRepair(99), Is.EqualTo(15));
+            map.TryExit();
+            Assert.That(corpseArmor.activeSelf, Is.True);
+            yield return new WaitForSeconds(.55f);
+            Apply(map.Player.GetComponent<DamageReceiver>(), 5);
+            map.TryExit();
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(30));
+            Assert.That(corpseArmor.activeSelf, Is.False);
             Assert.That(GameObject.Find("Подсветка двери машины"), Is.Null);
             Assert.That(GameObject.Find("Подсветка Бочка со снабжением"), Is.Null);
             Assert.That(GameObject.Find("Подсветка Металлолом у входа"), Is.Null);
@@ -419,7 +440,7 @@ namespace Game.Tests
         public IEnumerator Stage5Preview_DealerRejectsAnEmptyWalletAndCanGiveAHarmfulBottle()
         {
             var home = Object.FindFirstObjectByType<HomeScreen>();
-            home.FixedSeedInput.text = "34";
+            home.FixedSeedInput.text = "87";
             home.Stage5PreviewButton.onClick.Invoke();
             yield return Until(() => boot.Coordinator.Phase == RunPhase.InArena);
             var map = Object.FindFirstObjectByType<StreetMapScreen>();
@@ -443,7 +464,7 @@ namespace Game.Tests
             yield return null;
             FindPreviewButton("Согласиться · Tab").onClick.Invoke();
             yield return Until(() => GameObject.Find("Ответ").GetComponent<Text>().text.Contains("Не хватает монет"));
-            Assert.That(GameObject.Find("Пузырёк Диллера"), Is.Null);
+            Assert.That(GameObject.Find("Колба Диллера"), Is.Null);
             Assert.That(preview.Coins, Is.Zero);
             map.TryExit();
             Park(body, arrival);
@@ -451,11 +472,15 @@ namespace Game.Tests
 
             yield return ClearPreviewRoom(map, body, 0);
             yield return ClearPreviewRoom(map, body, 1);
+            Apply(map.Player.GetComponent<DamageReceiver>(), 10);
             float armor = map.Player.ReadSnapshot().Armor;
             Park(body, (Vector2)barrel.transform.position + Vector2.right * .72f);
             map.TryExit();
             Assert.That(barrel.activeSelf, Is.False);
-            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(armor + 1));
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(armor));
+            Assert.That(GameObject.Find("Броня на земле"), Is.Not.Null);
+            map.TryExit();
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(armor + 5));
             Park(body, Stage5PreviewController.DealerRoad);
             preview.TryVisit();
             Park(body, arrival + Vector2.up * 4.2f);

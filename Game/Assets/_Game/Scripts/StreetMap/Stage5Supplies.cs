@@ -10,16 +10,21 @@ namespace Game.StreetMap
         private sealed class Cache
         {
             public Vector2 Approach;
+            public Vector2 ArmorDropOffset;
             public string Prompt;
             public bool Medkit;
             public float Armor;
+            public bool Concealed;
             public GameObject Highlight;
             public bool HasLoot => Medkit || Armor > 0;
         }
 
         private readonly List<Cache> caches = new List<Cache>();
         private readonly PlayerCombatFacade hero;
+        private readonly Stage5PreviewController map;
         private readonly Func<Vector2, float, bool> near;
+        private string corpseWithArmor;
+        private const int ArmorPerFind = 5;
         private Cache selected;
         private bool backpackOpen;
         private int medkits;
@@ -37,12 +42,14 @@ namespace Game.StreetMap
         }
 
         public Stage5Supplies(Stage5PreviewController map, Stage5PreviewSession session,
-            PlayerCombatFacade hero, Func<Vector2, float, bool> near)
+            PlayerCombatFacade hero, Func<Vector2, float, bool> near, string corpseWithArmor)
         {
+            this.map = map;
             this.hero = hero;
             this.near = near;
+            this.corpseWithArmor = corpseWithArmor;
             int medkitBudget = 2;
-            int armorBudget = 4;
+            int armorBudget = corpseWithArmor == null ? 4 : 3;
             for (int i = 1; i < StreetMapLayout.Rooms.Count; i++)
             {
                 var room = StreetMapLayout.Rooms[i];
@@ -62,8 +69,10 @@ namespace Game.StreetMap
                 var cache = new Cache
                 {
                     Approach = position - Vector2.right * side * 1.14f,
+                    ArmorDropOffset = -Vector2.right * side * .64f,
                     Prompt = "E · Обыскать машину",
                     Medkit = medkit,
+                    Concealed = true,
                     Armor = TakeArmor(session, key, ref armorBudget)
                 };
                 if (cache.HasLoot)
@@ -89,7 +98,14 @@ namespace Game.StreetMap
         {
             if (budget <= 0 || session.Roll(key + "/armor", 100) >= 60) return 0;
             budget--;
-            return 1;
+            return ArmorPerFind;
+        }
+
+        public int ArmorFromCorpse(string spawnId)
+        {
+            if (corpseWithArmor != spawnId) return 0;
+            corpseWithArmor = null;
+            return ArmorPerFind;
         }
 
         private void AddArmorSpot(Stage5PreviewController map, Stage5PreviewSession session, string key, string title,
@@ -102,16 +118,17 @@ namespace Game.StreetMap
             caches.Add(new Cache
             {
                 Approach = position + (obstacle ? Vector2.right * .72f : Vector2.zero),
+                ArmorDropOffset = obstacle ? Vector2.right * .64f : Vector2.zero,
                 Prompt = prompt,
                 Armor = amount,
+                Concealed = obstacle,
                 Highlight = map.Outline("Подсветка " + title, position, size)
             });
         }
 
-        private Cache Nearby(Vector2 position)
+        private Cache Nearby(Vector2 position, float distance)
         {
             Cache closest = null;
-            float distance = float.PositiveInfinity;
             foreach (var item in caches)
             {
                 if (!item.HasLoot || !near(item.Approach, .9f)) continue;
@@ -123,12 +140,31 @@ namespace Game.StreetMap
             return closest;
         }
 
-        public string Prompt(Vector2 position) => Nearby(position)?.Prompt;
+        public string Prompt(Vector2 position, float maxDistanceSquared) => Nearby(position, maxDistanceSquared)?.Prompt;
 
-        public bool Search(Vector2 position)
+        public bool Search(Vector2 position, float maxDistanceSquared)
         {
-            var cache = Nearby(position);
+            var cache = Nearby(position, maxDistanceSquared);
             if (cache == null) return false;
+            if (cache.Concealed && cache.Armor > 0)
+            {
+                var location = cache.Approach + cache.ArmorDropOffset;
+                var size = new Vector2(.45f, .31f);
+                var plate = map.Tile("Броня на земле", location, size, new Color(.35f, .52f, .65f), 2);
+                var highlight = map.Outline("Контур брони на земле", location, size);
+                highlight.transform.SetParent(plate.transform, true);
+                caches.Add(new Cache
+                {
+                    Approach = location,
+                    Prompt = "E · Подобрать броню",
+                    Armor = cache.Armor,
+                    Highlight = plate
+                });
+                cache.Armor = 0;
+                SyncHighlight(cache);
+                Notice = "Найдена броня";
+                if (!cache.Medkit) return true;
+            }
             if (cache.Medkit)
             {
                 selected = cache;

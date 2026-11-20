@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Game.Actors;
 using Game.Core;
+using Game.Encounters;
 using Game.Input;
 using Game.UI;
 using UnityEngine;
@@ -23,6 +24,10 @@ namespace Game.StreetMap
             public bool Melee;
             public GameObject Reward;
             public string Name => Kind == PreviewNpc.Broker ? "Барыга" : "Диллер";
+            public string RewardTitle => Kind == PreviewNpc.Dealer ? "Колба Диллера" :
+                Melee ? "Заточка клинка" : "Улучшенное дуло";
+            public string RewardDescription => Kind == PreviewNpc.Dealer ?
+                "Получи случайный эффект на ближайший бой" : "+1 к урону (макет)";
         }
 
         private sealed class Loot
@@ -37,6 +42,9 @@ namespace Game.StreetMap
         {
             public GameObject Body, Marker;
             public int Ammo;
+            public float Armor;
+            public string Prompt => Ammo > 0 && Armor > 0 ? "E · Обыскать тело · Патроны и броня" :
+                Ammo > 0 ? "E · Обыскать тело · Патроны" : "E · Обыскать тело · Броня";
         }
 
         public static readonly Vector2 BrokerRoad = new Vector2(21.65f, 12f);
@@ -77,7 +85,7 @@ namespace Game.StreetMap
             sprite = hero.GetComponent<SpriteRenderer>().sprite;
             foreach (var candidate in FindObjectsByType<BoundedFollowCamera>(FindObjectsSortMode.None))
                 if (candidate.gameObject.scene == gameObject.scene) cameraFollow = candidate;
-            supplies = new Stage5Supplies(this, session, hero, Near);
+            supplies = new Stage5Supplies(this, session, hero, Near, PlanCorpseArmor(run.CurrentRequest.FixedEncounter));
             view = new Stage5PreviewView(controls.SafeRoot, Accept, Decline, ToggleBackpack, ApplyMedkit, StoreMedkit, CloseSupplies);
             input?.SetNpcContext(true, false, false);
             input?.SetNpcPassage(AtPassage);
@@ -93,6 +101,16 @@ namespace Game.StreetMap
         }
 
         private bool CanInteract => run != null && run.Phase == RunPhase.InArena && !screen.IsPaused && !hero.IsDead;
+
+        private string PlanCorpseArmor(EncounterPlan plan)
+        {
+            foreach (var room in plan.Rooms)
+            foreach (var wave in room.Waves)
+            foreach (var spawn in wave.Spawns)
+                if (!EnemyTypes.IsElite(spawn.EnemyTypeId) && session.Roll(spawn.SpawnId + "/armor", 100) < 12)
+                    return spawn.SpawnId;
+            return null;
+        }
 
         private void Update()
         {
@@ -177,7 +195,7 @@ namespace Game.StreetMap
         internal static void WorldLabel(Transform parent, Vector2 position, string label)
         {
             var sign = new GameObject(label + " · подпись");
-            sign.transform.SetParent(parent, false);
+            sign.transform.SetParent(parent, true);
             sign.transform.position = position;
             var text = sign.AddComponent<TextMesh>();
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -203,10 +221,12 @@ namespace Game.StreetMap
                 !session.TryRegisterDeath(room.RoomId, spawn, type, out int ammo, out int coins, out int crystals)) return;
             var corpse = Tile("Тело зомби", position, new Vector2(.96f, .43f), new Color(.28f, .17f, .20f), -1);
             corpse.transform.rotation = Quaternion.Euler(0, 0, -24f);
-            if (ammo > 0)
+            int armor = supplies.ArmorFromCorpse(spawn);
+            if (ammo > 0 || armor > 0)
             {
-                var marker = Outline("Патроны в теле", position, new Vector2(.96f, .43f), -24f);
-                bodies.Add(new BodyLoot { Body = corpse, Marker = marker, Ammo = ammo });
+                var marker = Outline(ammo > 0 ? "Патроны в теле" : "Броня в теле",
+                    position, new Vector2(.96f, .43f), -24f);
+                bodies.Add(new BodyLoot { Body = corpse, Marker = marker, Ammo = ammo, Armor = armor });
             }
             Drop(room.RoomId, position, PreviewLoot.Coins, coins, new Color(.99f, .76f, .19f));
             Drop(room.RoomId, position + Vector2.right * .33f, PreviewLoot.Crystals, crystals, new Color(.64f, .43f, .95f));
@@ -268,17 +288,20 @@ namespace Game.StreetMap
             }
             if (AtPassage()) { TryVisit(); return true; }
             var corpse = NearbyBody();
-            if (corpse == null)
+            if (supplies.Search(body.position, DistanceToBodySquared(corpse)))
             {
-                if (!supplies.Search(body.position)) return false;
                 notice = supplies.Open ? null : supplies.Notice;
                 SyncSupplyInput();
                 return true;
             }
-            int accepted = hero.TryAddReserve(corpse.Ammo);
-            if (accepted == 0) { notice = "Резерв патронов полон"; return true; }
-            corpse.Ammo -= accepted;
-            if (corpse.Ammo == 0)
+            if (corpse == null) return false;
+            int ammo = corpse.Ammo > 0 ? hero.TryAddReserve(corpse.Ammo) : 0;
+            float armor = corpse.Armor > 0 ? hero.TryRepair(corpse.Armor) : 0;
+            corpse.Ammo -= ammo;
+            corpse.Armor -= armor;
+            notice = armor > 0 ? $"Броня +{armor:0.##}" : ammo > 0 ? $"Патроны +{ammo}" :
+                corpse.Armor > 0 ? "Броня полная" : "Резерв патронов полон";
+            if (corpse.Ammo == 0 && corpse.Armor <= 0)
             {
                 bodies.Remove(corpse);
                 corpse.Marker.SetActive(false);
@@ -286,6 +309,9 @@ namespace Game.StreetMap
             }
             return true;
         }
+
+        private float DistanceToBodySquared(BodyLoot corpse) => corpse == null ? float.PositiveInfinity :
+            ((Vector2)corpse.Body.transform.position - body.position).sqrMagnitude;
 
         private BodyLoot NearbyBody()
         {
@@ -341,11 +367,11 @@ namespace Game.StreetMap
             {
                 if (inside.Kind == PreviewNpc.Dealer) session.Drink(inside.Id);
                 else if (hero.ReadSnapshot().IsMelee == inside.Melee)
-                    session.Modification = inside.Melee ? "Заточка ножа" : "Ускорение стрельбы";
+                    session.Modification = inside.RewardTitle;
                 else { notice = "Возьмите оружие, для которого заказано усиление"; return; }
                 inside.State = Deal.Collected;
                 inside.Reward.SetActive(false);
-                notice = inside.Kind == PreviewNpc.Dealer ? "Пузырёк выпит" : "Усиление подобрано";
+                notice = inside.Kind == PreviewNpc.Dealer ? "Колба выпита" : "Усиление подобрано";
             }
             else if (inside.State == Deal.Available)
             {
@@ -431,8 +457,9 @@ namespace Game.StreetMap
         private void Ready(Stop stop)
         {
             stop.State = Deal.Ready;
-            stop.Reward = Tile(stop.Kind == PreviewNpc.Dealer ? "Пузырёк Диллера" : "Усиление",
+            stop.Reward = Tile(stop.Kind == PreviewNpc.Dealer ? stop.RewardTitle : "Усиление",
                 stop.Interior + Vector2.up * 1.25f, new Vector2(.35f, .44f), new Color(.62f, .43f, .91f), 4);
+            WorldLabel(stop.Reward.transform, (Vector2)stop.Reward.transform.position + Vector2.up * .48f, stop.RewardTitle);
         }
 
         private void Render()
@@ -441,9 +468,8 @@ namespace Game.StreetMap
             string hint = "";
             var corpse = CanInteract && inside == null && stop == null ? NearbyBody() : null;
             if (corpse == null && notice == "Резерв патронов полон") notice = null;
-            if (corpse != null) hint = "E · Обыскать тело";
-            if (inside == null && stop == null && corpse == null && CanInteract)
-                hint = supplies.Prompt(body.position) ?? "";
+            if (inside == null && stop == null && CanInteract)
+                hint = supplies.Prompt(body.position, DistanceToBodySquared(corpse)) ?? corpse?.Prompt ?? "";
             if (inside == null && stop != null) hint = "Space / Tab / E · Пройти";
             if (inside != null)
             {
@@ -453,8 +479,7 @@ namespace Game.StreetMap
                     {
                         Deal.Available => stop.Name + " · Tab: поговорить",
                         Deal.Working => $"{stop.Name} работает · {Mathf.Max(0, stop.Remaining):0.0} с",
-                        Deal.Ready => stop.Kind == PreviewNpc.Dealer ? "Tab / E · Выпить пузырёк" :
-                            (stop.Melee ? "Заточка ножа" : "Ускорение стрельбы") + " · Tab / E: взять",
+                        Deal.Ready => stop.Kind == PreviewNpc.Dealer ? "Tab / E · Выпить" : "Tab / E · Взять",
                         _ => stop.Name
                     };
             }
@@ -465,6 +490,9 @@ namespace Game.StreetMap
             if (session.Modification != null) effect += " " + session.Modification + " (макет)";
             view.RenderSupplies(CanInteract && !offerOpen, supplies.Open, supplies.FoundMedkit,
                 supplies.BackpackMedkits, supplies.CanHeal);
+            bool showReward = CanInteract && inside != null && inside.State == Deal.Ready &&
+                !offerOpen && !supplies.Open && Near(inside.Interior + Vector2.up, 2.2f);
+            view.RenderReward(showReward ? inside.RewardTitle : null, showReward ? inside.RewardDescription : null);
             view.Render(Coins, PendingCrystals, ConfirmedCrystals, supplies.Open ? "" : hint, effect,
                 CanInteract && offerOpen ? inside.Name + "\n" + (inside.Kind == PreviewNpc.Broker
                     ? $"Улучшить оружие за {inside.Price} монет?" : $"Купить пузырёк за {inside.Price} монет?") : null, notice);

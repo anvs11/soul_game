@@ -11,6 +11,7 @@ namespace Game.UI
         private readonly RectTransform supplyPanel;
         private readonly Text supplyTitle, backpackLabel;
         private readonly Button applyMedkit, storeMedkit;
+        private readonly Text rewardTitle, rewardDescription;
 
         public Stage5PreviewView(RectTransform safe, Action accept, Action decline,
             Action backpack, Action apply, Action store, Action closeSupply)
@@ -40,6 +41,24 @@ namespace Game.UI
             storeMedkit = Button("В рюкзак · E", supplyPanel, Vector2.down * 36, store);
             Button("Закрыть · B", supplyPanel, Vector2.down * 101, closeSupply);
             supplyPanel.gameObject.SetActive(false);
+
+            rewardTitle = Label("Название находки", safe, Vector2.up * 164, new Vector2(370, 36), 23);
+            rewardTitle.rectTransform.anchorMin = rewardTitle.rectTransform.anchorMax = new Vector2(.5f, 0);
+            var detail = Rect("Карточка находки", safe, Vector2.up * 119, new Vector2(370, 45));
+            detail.anchorMin = detail.anchorMax = new Vector2(.5f, 0);
+            var backing = detail.gameObject.AddComponent<Image>();
+            backing.color = new Color(.075f, .095f, .10f, .94f);
+            backing.raycastTarget = false;
+            rewardDescription = Label("Описание находки", detail, Vector2.zero, new Vector2(355, 40), 17);
+            RenderReward(null, null);
+        }
+
+        public void RenderReward(string title, string description)
+        {
+            rewardTitle.gameObject.SetActive(title != null);
+            rewardDescription.transform.parent.gameObject.SetActive(title != null);
+            rewardTitle.text = title;
+            rewardDescription.text = description;
         }
 
         public void RenderSupplies(bool visible, bool open, bool found, int medkits, bool canHeal)
