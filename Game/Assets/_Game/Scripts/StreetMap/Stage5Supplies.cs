@@ -175,8 +175,8 @@ namespace Game.StreetMap
                 return true;
             }
             float accepted = hero.TryRepair(cache.Armor);
-            cache.Armor -= accepted;
-            Notice = accepted > 0 ? $"Броня +{accepted:0.##}" : "Броня полная";
+            if (accepted > 0) cache.Armor = 0;
+            Notice = accepted > 0 ? "Броня восстановлена" : "Броня полная";
             SyncHighlight(cache);
             return true;
         }

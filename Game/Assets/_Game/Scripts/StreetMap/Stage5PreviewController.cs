@@ -298,8 +298,8 @@ namespace Game.StreetMap
             int ammo = corpse.Ammo > 0 ? hero.TryAddReserve(corpse.Ammo) : 0;
             float armor = corpse.Armor > 0 ? hero.TryRepair(corpse.Armor) : 0;
             corpse.Ammo -= ammo;
-            corpse.Armor -= armor;
-            notice = armor > 0 ? $"Броня +{armor:0.##}" : ammo > 0 ? $"Патроны +{ammo}" :
+            if (armor > 0) corpse.Armor = 0;
+            notice = armor > 0 ? "Броня восстановлена" : ammo > 0 ? $"Патроны +{ammo}" :
                 corpse.Armor > 0 ? "Броня полная" : "Резерв патронов полон";
             if (corpse.Ammo == 0 && corpse.Armor <= 0)
             {

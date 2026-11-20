@@ -433,12 +433,11 @@ namespace Game.Tests
             Apply(map.Player.GetComponent<DamageReceiver>(), 2);
             map.TryExit();
             Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(30));
-            Assert.That(corpseArmor.activeSelf, Is.True);
+            Assert.That(corpseArmor.activeSelf, Is.False, "Applying any armor must consume the corpse's armor find.");
             yield return new WaitForSeconds(.55f);
             Apply(map.Player.GetComponent<DamageReceiver>(), 5);
             map.TryExit();
-            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(28), "The remaining three points must not reroll.");
-            Assert.That(corpseArmor.activeSelf, Is.False);
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(25), "An already used item must not restore more armor.");
             Assert.That(GameObject.Find("Подсветка двери машины"), Is.Null);
             Assert.That(GameObject.Find("Подсветка Бочка со снабжением"), Is.Null);
             Assert.That(GameObject.Find("Подсветка Металлолом у входа"), Is.Null);
@@ -480,15 +479,18 @@ namespace Game.Tests
 
             yield return ClearPreviewRoom(map, body, 0);
             yield return ClearPreviewRoom(map, body, 1);
-            Apply(map.Player.GetComponent<DamageReceiver>(), 10);
+            map.Player.TryRepair(99);
+            Apply(map.Player.GetComponent<DamageReceiver>(), 1);
             float armor = map.Player.ReadSnapshot().Armor;
             Park(body, (Vector2)barrel.transform.position + Vector2.right * .72f);
             map.TryExit();
             Assert.That(barrel.activeSelf, Is.False);
             Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(armor));
-            Assert.That(GameObject.Find("Броня на земле"), Is.Not.Null);
+            var groundArmor = GameObject.Find("Броня на земле");
+            Assert.That(groundArmor, Is.Not.Null);
             map.TryExit();
-            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(armor + 3));
+            Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(30));
+            Assert.That(groundArmor.activeSelf, Is.False, "A ground find is consumed even if only one point fits.");
             Park(body, Stage5PreviewController.DealerRoad);
             preview.TryVisit();
             Park(body, arrival + Vector2.up * 4.2f);
