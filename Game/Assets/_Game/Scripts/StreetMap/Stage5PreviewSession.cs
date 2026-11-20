@@ -7,7 +7,7 @@ using Game.Encounters;
 namespace Game.StreetMap
 {
     internal enum PreviewNpc { Broker, Dealer }
-    internal enum PreviewLoot { Ammo, Coins, Crystals }
+    internal enum PreviewLoot { Coins, Crystals }
     internal enum PreviewProfileScenario { Normal, WriteFailure, Backup, FutureSchema }
 
     internal sealed class Stage5PreviewProfile

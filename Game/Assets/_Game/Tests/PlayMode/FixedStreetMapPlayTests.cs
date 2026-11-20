@@ -220,18 +220,25 @@ namespace Game.Tests
 
             foreach (Vector2 road in new[] { Stage5PreviewController.BrokerRoad, Stage5PreviewController.DealerRoad })
                 Assert.That(Physics2D.OverlapCircle(road, .45f, LayerMask.GetMask("World")), Is.Null);
+            Assert.That(GameObject.Find("Вход Барыга").transform.position.x, Is.EqualTo(21).Within(.15f));
+            Assert.That(GameObject.Find("Вход Диллер").transform.position.y, Is.EqualTo(22).Within(.15f));
             Assert.That(Object.FindObjectsByType<EventSystem>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
             Assert.That(Object.FindObjectsByType<InputSystemUIInputModule>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
             yield return ClearPreviewRoom(map, body, 0);
             Assert.That(preview.ConfirmedCrystals, Is.GreaterThan(checkpointBalance));
             Assert.That(preview.PendingCrystals, Is.Zero);
             Assert.That(preview.Coins, Is.GreaterThanOrEqualTo(3));
-            var ammo = GameObject.Find("Магазин");
+            var ammo = GameObject.Find("Патроны в теле");
             Assert.That(ammo, Is.Not.Null);
             Park(body, ammo.transform.position);
             int reserve = map.Player.ReadSnapshot().ReserveAmmo;
+            int bodies = map.GetComponentsInChildren<SpriteRenderer>().Count(sprite => sprite.name == "Тело зомби");
+            yield return null;
+            Assert.That(map.Player.ReadSnapshot().ReserveAmmo, Is.EqualTo(reserve));
             map.TryExit();
             Assert.That(map.Player.ReadSnapshot().ReserveAmmo, Is.EqualTo(reserve + 8));
+            Assert.That(ammo.activeSelf, Is.False);
+            Assert.That(map.GetComponentsInChildren<SpriteRenderer>().Count(sprite => sprite.name == "Тело зомби"), Is.EqualTo(bodies));
 
             var keyboard = InputSystem.AddDevice<Keyboard>();
             var pad = InputSystem.AddDevice<Gamepad>();
@@ -249,8 +256,8 @@ namespace Game.Tests
                 if (map.IsPaused) map.Resume();
                 Park(body, Stage5PreviewController.BrokerRoad);
                 int rounds = map.Player.ReadSnapshot().Magazine;
-                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab, Key.Space));
-                yield return Until(() => preview.IsInside);
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
+                yield return Until(() => preview.IsInside, "Tab must open the passage on its own.");
                 Assert.That(map.Player.ReadSnapshot().Magazine, Is.EqualTo(rounds));
                 pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
                 yield return null;
@@ -258,6 +265,19 @@ namespace Game.Tests
                 Assert.That(map.MiniMap.HeroMapPosition, Is.EqualTo(StreetMiniMap.Project(Stage5PreviewController.BrokerRoad)));
                 Vector2 inside = body.position;
                 Assert.That(Object.FindFirstObjectByType<BoundedFollowCamera>().Bounds.Contains(inside), Is.True);
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Space));
+                yield return Until(() => !preview.IsInside, "Space must leave through the nearby exit.");
+                yield return null;
+                Assert.That(preview.IsInside, Is.False, "Holding Space must not re-enter the passage.");
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                yield return null;
+                yield return null;
+                Assert.That(controls.Attack.GetComponentInChildren<Text>().text, Is.EqualTo("Пройти"));
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Space));
+                yield return Until(() => preview.IsInside, "The attack key must enter at the passage.");
+                Assert.That(map.Player.ReadSnapshot().Magazine, Is.EqualTo(rounds));
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                yield return null;
                 Park(body, inside + Vector2.up * 4.2f);
                 var npcPointer = new PointerEventData(EventSystem.current) { pointerId = 3 };
                 controls.Npc.OnPointerDown(npcPointer);
@@ -288,6 +308,9 @@ namespace Game.Tests
                 preview.TryVisit();
 
                 yield return ClearPreviewRoom(map, body, 1);
+                var medkit = GameObject.Find("Аптечка · подпись");
+                Assert.That(medkit, Is.Not.Null);
+                Assert.That(medkit.transform.position.x, Is.EqualTo(31f).Within(.1f));
                 Park(body, Stage5PreviewController.DealerRoad);
                 InputSystem.QueueStateEvent(pad, new GamepadState().WithButton(GamepadButton.East));
                 yield return Until(() => preview.IsInside);

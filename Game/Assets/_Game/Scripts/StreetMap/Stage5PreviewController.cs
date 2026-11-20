@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Game.Actors;
-using Game.Combat;
 using Game.Core;
 using Game.Input;
 using Game.UI;
@@ -34,15 +33,23 @@ namespace Game.StreetMap
             public GameObject Object;
         }
 
-        public static readonly Vector2 BrokerRoad = new Vector2(22.3f, 12f);
-        public static readonly Vector2 DealerRoad = new Vector2(37f, 23.3f);
+        private sealed class BodyLoot
+        {
+            public GameObject Body, Marker;
+            public int Ammo;
+        }
+
+        public static readonly Vector2 BrokerRoad = new Vector2(21.65f, 12f);
+        public static readonly Vector2 DealerRoad = new Vector2(37f, 22.65f);
         private readonly List<Stop> stops = new List<Stop>();
         private readonly List<Loot> loot = new List<Loot>();
+        private readonly List<BodyLoot> bodies = new List<BodyLoot>();
         private StreetMapScreen screen;
         private RunCoordinator run;
         private PlayerCombatFacade hero;
         private Stage5PreviewSession session;
         private Stage5PreviewView view;
+        private BattleControls battleControls;
         private BoundedFollowCamera cameraFollow;
         private Rigidbody2D body;
         private LocalInputSource input;
@@ -62,6 +69,7 @@ namespace Game.StreetMap
             screen = map;
             run = coordinator;
             hero = map.Player;
+            battleControls = controls;
             session = new Stage5PreviewSession(run.CurrentRequest.Seed, Stage5PreviewProfile.For(run));
             body = hero.GetComponent<Rigidbody2D>();
             input = hero.GetComponent<LocalInputSource>();
@@ -70,6 +78,7 @@ namespace Game.StreetMap
                 if (candidate.gameObject.scene == gameObject.scene) cameraFollow = candidate;
             view = new Stage5PreviewView(controls.SafeRoot, Accept, Decline);
             input?.SetNpcContext(true, false, false);
+            input?.SetNpcPassage(AtPassage);
             hero.NpcRequested += TryVisit;
 
             // Four named replay fixtures. Role 1 supplies the real placement plan.
@@ -102,7 +111,10 @@ namespace Game.StreetMap
         {
             var stop = new Stop { Kind = kind, Id = id, Road = road, Interior = interior, Price = price };
             stops.Add(stop);
-            Tile("Вход " + stop.Name, road, new Vector2(.48f, 1.15f), new Color(.87f, .86f, .74f), 3);
+            bool vertical = kind == PreviewNpc.Broker;
+            Vector2 threshold = road - (vertical ? Vector2.right : Vector2.up) * .57f;
+            Tile("Вход " + stop.Name, threshold, vertical ? new Vector2(.20f, 1.45f) : new Vector2(1.45f, .20f),
+                new Color(.87f, .86f, .74f), 3);
             var floor = kind == PreviewNpc.Broker ? new Color(.14f, .16f, .18f) : new Color(.19f, .15f, .13f);
             Tile(stop.Name + " · пол", interior, new Vector2(12, 10), floor, -3);
             Wall(interior + new Vector2(-6, 0), new Vector2(.5f, 10));
@@ -112,17 +124,7 @@ namespace Game.StreetMap
             Tile("Выход", Exit(stop), new Vector2(1.2f, .35f), Color.white, 1);
             Tile(stop.Name, interior + Vector2.up * 2.4f, new Vector2(.85f, 1.15f),
                 kind == PreviewNpc.Broker ? new Color(.6f, .47f, .29f) : new Color(.42f, .35f, .58f), 2);
-            var sign = new GameObject(stop.Name + " · имя");
-            sign.transform.SetParent(transform, false);
-            sign.transform.position = interior + Vector2.up * 3.2f;
-            var text = sign.AddComponent<TextMesh>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            sign.GetComponent<MeshRenderer>().sharedMaterial = text.font.material;
-            sign.GetComponent<MeshRenderer>().sortingOrder = 3;
-            text.anchor = TextAnchor.MiddleCenter;
-            text.fontSize = 48;
-            text.characterSize = .09f;
-            text.text = stop.Name;
+            WorldLabel(transform, interior + Vector2.up * 3.2f, stop.Name);
             if (kind == PreviewNpc.Dealer)
             {
                 Tile("Свет лампы", interior + Vector2.up * 1.4f, new Vector2(5f, 4f), new Color(.29f, .24f, .17f), -2);
@@ -151,6 +153,22 @@ namespace Game.StreetMap
             return tile;
         }
 
+        internal static void WorldLabel(Transform parent, Vector2 position, string label)
+        {
+            var sign = new GameObject(label + " · подпись");
+            sign.transform.SetParent(parent, false);
+            sign.transform.position = position;
+            var text = sign.AddComponent<TextMesh>();
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var renderer = sign.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = text.font.material;
+            renderer.sortingOrder = 3;
+            text.anchor = TextAnchor.MiddleCenter;
+            text.fontSize = 48;
+            text.characterSize = .09f;
+            text.text = label;
+        }
+
         private void Wall(Vector2 position, Vector2 size)
         {
             var wall = Tile("Стена", position, size, new Color(.08f, .09f, .10f), 1);
@@ -162,7 +180,13 @@ namespace Game.StreetMap
         {
             if (run.Phase != RunPhase.InArena ||
                 !session.TryRegisterDeath(room.RoomId, spawn, type, out int ammo, out int coins, out int crystals)) return;
-            Drop(room.RoomId, position + Vector2.left * .34f, PreviewLoot.Ammo, ammo, new Color(.7f, .82f, .92f));
+            var corpse = Tile("Тело зомби", position, new Vector2(.96f, .43f), new Color(.28f, .17f, .20f), -1);
+            corpse.transform.rotation = Quaternion.Euler(0, 0, -24f);
+            if (ammo > 0)
+            {
+                var marker = Tile("Патроны в теле", position, new Vector2(.20f, .13f), new Color(.72f, .83f, .92f), 1);
+                bodies.Add(new BodyLoot { Body = corpse, Marker = marker, Ammo = ammo });
+            }
             Drop(room.RoomId, position, PreviewLoot.Coins, coins, new Color(.99f, .76f, .19f));
             Drop(room.RoomId, position + Vector2.right * .33f, PreviewLoot.Crystals, crystals, new Color(.64f, .43f, .95f));
         }
@@ -170,7 +194,7 @@ namespace Game.StreetMap
         private void Drop(string room, Vector2 position, PreviewLoot kind, int amount, Color color)
         {
             if (amount == 0) return;
-            string label = kind == PreviewLoot.Ammo ? "Магазин" : kind == PreviewLoot.Coins ? "Монеты" : "Кристаллы";
+            string label = kind == PreviewLoot.Coins ? "Монеты" : "Кристаллы";
             var item = Tile(label, position, new Vector2(.35f, .3f), color, 3);
             loot.Add(new Loot { Room = room, Object = item, Kind = kind, Amount = amount });
         }
@@ -187,7 +211,7 @@ namespace Game.StreetMap
             for (int i = loot.Count - 1; i >= 0; i--)
             {
                 var item = loot[i];
-                if (item.Kind == PreviewLoot.Ammo || !Near(item.Object.transform.position, 1.2f)) continue;
+                if (!Near(item.Object.transform.position, 1.2f)) continue;
                 session.Collect(item.Kind, item.Amount);
                 RemoveLoot(i);
             }
@@ -215,33 +239,47 @@ namespace Game.StreetMap
                 else TryVisit();
                 return true;
             }
-            if (hero.ReadSnapshot().ReserveAmmo >= WeaponRuntimeState.PickupReserveLimit) return false;
-            int nearest = -1;
-            float distance = float.PositiveInfinity;
-            for (int i = 0; i < loot.Count; i++)
+            if (AtPassage()) { TryVisit(); return true; }
+            var corpse = NearbyBody();
+            if (corpse == null) return false;
+            int accepted = hero.TryAddReserve(corpse.Ammo);
+            if (accepted == 0) { notice = "Резерв патронов полон"; return true; }
+            corpse.Ammo -= accepted;
+            if (corpse.Ammo == 0)
             {
-                var item = loot[i];
-                if (item.Kind != PreviewLoot.Ammo || !Near(item.Object.transform.position, 1.5f)) continue;
-                float candidate = Vector2.SqrMagnitude((Vector2)item.Object.transform.position - body.position);
+                bodies.Remove(corpse);
+                corpse.Marker.SetActive(false);
+                Destroy(corpse.Marker);
+            }
+            return true;
+        }
+
+        private BodyLoot NearbyBody()
+        {
+            BodyLoot nearest = null;
+            float distance = float.PositiveInfinity;
+            foreach (var corpse in bodies)
+            {
+                var location = (Vector2)corpse.Body.transform.position;
+                if (!Near(location, 1.5f)) continue;
+                float candidate = Vector2.SqrMagnitude(location - body.position);
                 if (candidate >= distance) continue;
-                nearest = i;
+                nearest = corpse;
                 distance = candidate;
             }
-            if (nearest < 0) return false;
-            int accepted = hero.TryAddReserve(loot[nearest].Amount);
-            loot[nearest].Amount -= accepted;
-            if (loot[nearest].Amount == 0) RemoveLoot(nearest);
-            return accepted > 0;
+            return nearest;
         }
 
         private Stop NearbyEntrance()
         {
             foreach (var room in screen.Rooms) if (room.State.IsActive) return null;
-            foreach (var stop in stops) if (Near(stop.Road, 1.3f)) return stop;
+            foreach (var stop in stops) if (Near(stop.Road, 1.15f)) return stop;
             return null;
         }
 
         private static Vector2 Exit(Stop stop) => stop.Interior + Vector2.down * 4f;
+        private bool AtPassage() => CanInteract && !offerOpen &&
+            (inside == null ? NearbyEntrance() != null : Near(Exit(inside), 1.3f));
 
         public void TryVisit()
         {
@@ -329,10 +367,13 @@ namespace Game.StreetMap
         {
             var stop = inside ?? (CanInteract ? NearbyEntrance() : null);
             string hint = "";
-            if (inside == null && stop != null) hint = "Tab · Пройти";
+            var corpse = CanInteract && inside == null && stop == null ? NearbyBody() : null;
+            if (corpse == null && notice == "Резерв патронов полон") notice = null;
+            if (corpse != null) hint = "E · Обыскать тело";
+            if (inside == null && stop != null) hint = "Space / Tab / E · Пройти";
             if (inside != null)
             {
-                hint = Near(Exit(stop), 1.3f) ? "Tab · На улицу" : stop.Name;
+                hint = Near(Exit(stop), 1.3f) ? "Space / Tab / E · На улицу" : stop.Name;
                 if (Near(stop.Interior + Vector2.up, 2.2f))
                     hint = stop.State switch
                     {
@@ -343,6 +384,7 @@ namespace Game.StreetMap
                         _ => stop.Name
                     };
             }
+            battleControls.SetPassageLabel(AtPassage() ? (IsInside ? "На улицу" : "Пройти") : null);
             string effect = session.ActiveEffect.HasValue
                 ? session.Beneficial ? "Пузырёк: ускорение (макет)" : "Пузырёк: замедление (макет)"
                 : "";
@@ -357,7 +399,11 @@ namespace Game.StreetMap
         private void OnDestroy()
         {
             if (hero != null) hero.NpcRequested -= TryVisit;
-            if (input != null) input.SetNpcContext(false, false, false);
+            if (input != null)
+            {
+                input.SetNpcPassage(null);
+                input.SetNpcContext(false, false, false);
+            }
             if (screen != null && screen.Rooms != null)
                 foreach (var room in screen.Rooms) if (room != null) room.EnemyDefeated -= OnDeath;
         }

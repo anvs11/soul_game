@@ -226,8 +226,15 @@ namespace Game.StreetMap
             if (combatAssets != null)
             {
                 int index = Array.IndexOf(Rooms, room);
-                Vector2 center = StreetMapLayout.Rooms[index + 1].Center;
-                if (index < 3) Drop(room, (PickupKind)index, center);
+                var layout = StreetMapLayout.Rooms[index + 1];
+                Vector2 center = layout.Center;
+                if (preview != null)
+                {
+                    var supply = new Vector2(layout.Bounds.xMax - 2f, center.y + 2.5f);
+                    if (index == 1 || index == 3) Drop(room, PickupKind.Health, supply);
+                    if (index >= 2) Drop(room, PickupKind.Armor, supply + Vector2.up * (index == 3 ? 1.7f : 0));
+                }
+                else if (index < 3) Drop(room, (PickupKind)index, center);
                 else
                 {
                     Drop(room, PickupKind.Ammo, center + Vector2.left * 2f);
@@ -240,9 +247,11 @@ namespace Game.StreetMap
         }
         private void Drop(RoomController room, PickupKind kind, Vector2 position)
         {
-            if (preview != null && kind == PickupKind.Ammo) return;
             var pickup = combatAssets.CreatePickup(kind, position, transform);
             pickup.Initialize(room.RunId, room.RoomId);
+            if (preview != null)
+                Stage5PreviewController.WorldLabel(pickup.transform, position + Vector2.up * .72f,
+                    kind == PickupKind.Health ? "Аптечка" : "Ремкомплект");
             pickups.Add(pickup);
         }
         private bool TryPickup()

@@ -11,6 +11,7 @@ namespace Game.UI
         private GameObject gameplay, menu;
         private Rect lastSafe;
         private Action pause, resume, leave;
+        private Text attackLabel;
         public OnScreenStick Stick { get; private set; }
         public OnScreenButton Attack { get; private set; }
         public OnScreenButton Dodge { get; private set; }
@@ -35,6 +36,7 @@ namespace Game.UI
             var handle=Box("Stick",baseRect,new Vector2(.5f,.5f),Vector2.zero,new Vector2(100,100),new Color(.3f,.6f,.5f,.8f));
             Stick=handle.gameObject.AddComponent<OnScreenStick>(); Stick.controlPath="<Gamepad>/leftStick"; Stick.movementRange=55;
             Attack=Control("Огонь",new Vector2(1,0),new Vector2(-100,120),new Vector2(120,120),"<Gamepad>/buttonSouth");
+            attackLabel = Attack.GetComponentInChildren<Text>();
             if (enableDodge)
                 Dodge = Control("Кувырок", new Vector2(1, 0), new Vector2(-100, 237),
                     new Vector2(120, 80), "<Gamepad>/rightShoulder");
@@ -50,6 +52,7 @@ namespace Game.UI
             menu.SetActive(false);
         }
         public void SetPaused(bool value) { ClearHeld(); if(menu!=null)menu.SetActive(value); if(gameplay!=null)gameplay.SetActive(!value); }
+        internal void SetPassageLabel(string label) => attackLabel.text = label ?? "Огонь";
         public void ClearHeld()
         {
             if(gameplay==null || EventSystem.current==null)return;

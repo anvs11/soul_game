@@ -12,6 +12,7 @@ namespace Game.Input
         private InputActionMap map;
         private InputAction move, attack, switchWeapon, interact, pause, dodge, npc;
         private bool npcEnabled, visitingNpc, npcDialog;
+        private Func<bool> atNpcPassage;
         private int sampledFrame = -1;
         private int inputResetFrame = -1;
         private PlayerCommand command;
@@ -52,8 +53,10 @@ namespace Game.Input
             if (!isActiveAndEnabled || map == null || !map.enabled) return default;
             if (sampledFrame == Time.frameCount) return command;
             sampledFrame = Time.frameCount;
-            bool npcPressed = npcEnabled && sampledFrame != inputResetFrame && npc != null && npc.WasPressedThisFrame();
-            bool canAttack = !visitingNpc && !npcPressed;
+            bool passage = npcEnabled && atNpcPassage?.Invoke() == true;
+            bool npcPressed = npcEnabled && sampledFrame != inputResetFrame &&
+                (npc?.WasPressedThisFrame() == true || (passage && attack.WasPressedThisFrame()));
+            bool canAttack = !visitingNpc && !npcPressed && !passage;
             command = new PlayerCommand(npcDialog ? Vector2.zero : move.ReadValue<Vector2>(), canAttack && attack.IsPressed(),
                 !npcDialog && !npcPressed && switchWeapon.WasPressedThisFrame(), !npcPressed && interact.WasPressedThisFrame(),
                 pause.WasPressedThisFrame(), canAttack && sampledFrame != inputResetFrame && dodge != null && dodge.WasPressedThisFrame(),
@@ -67,6 +70,8 @@ namespace Game.Input
             visitingNpc = visiting;
             npcDialog = dialog;
         }
+
+        internal void SetNpcPassage(Func<bool> predicate) => atNpcPassage = predicate;
 
         private void OnApplicationFocus(bool value) { if (focused == value) return; focused = value; RefreshEnabled(); }
         private void OnApplicationPause(bool value) { if (suspended == value) return; suspended = value; RefreshEnabled(); }
