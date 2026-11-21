@@ -19,6 +19,13 @@ namespace Game.Progression
         private ProgressionResult Execute(ProgressionCommandKey key, string name, object data,
             Func<CommandOutcome> action, bool home = false)
         {
+            lock (commandGate)
+                return ExecuteLocked(key, name, data, action, home);
+        }
+
+        private ProgressionResult ExecuteLocked(ProgressionCommandKey key, string name, object data,
+            Func<CommandOutcome> action, bool home)
+        {
             if (!Id(key.ActionId) || (home ? key.RunId != null : !Id(key.RunId)))
                 return Reject(ProgressionFailure.InvalidRequest).ToResult(Snapshot);
             if (executing)

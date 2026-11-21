@@ -7,7 +7,7 @@ namespace Game.Contracts
 {
     public enum ProgressionLootKind { Ammo, Coins, Crystals }
     public enum ProgressionNpcState { Offered, Working, ItemAvailable, ItemUsed }
-    public enum ProgressionProfileState { Ready, RecoveredFromBackup, IncompatibleSchema }
+    public enum ProgressionProfileState { Ready, RecoveredFromBackup, IncompatibleSchema, Unavailable }
     public enum ProgressionEffectKind { Beneficial, Harmful }
 
     public readonly struct ProgressionLootSnapshot
@@ -107,6 +107,7 @@ namespace Game.Contracts
     {
         public string RunId { get; }
         public string StageId { get; }
+        public string StartingWeaponId { get; }
         public int Coins { get; }
         public int PendingCrystals { get; }
         public IReadOnlyList<ProgressionLootSnapshot> Loot { get; }
@@ -118,10 +119,12 @@ namespace Game.Contracts
         public ProgressionRunSnapshot(string runId, int coins, int pendingCrystals,
             IEnumerable<ProgressionLootSnapshot> loot = null, IEnumerable<ProgressionNpcSnapshot> npcs = null,
             ProgressionEffectSnapshot? activeBottleEffect = null,
-            IEnumerable<ProgressionEffectSnapshot> activeBottleEffects = null, string stageId = null)
+            IEnumerable<ProgressionEffectSnapshot> activeBottleEffects = null, string stageId = null,
+            string startingWeaponId = null)
         {
             RunId = runId;
             StageId = stageId;
+            StartingWeaponId = startingWeaponId;
             Coins = coins;
             PendingCrystals = pendingCrystals;
             Loot = ProgressionSnapshot.Copy(loot);
@@ -137,14 +140,21 @@ namespace Game.Contracts
         public ProgressionProfileState State { get; }
         public IReadOnlyList<string> UnlockedIds { get; }
         public IReadOnlyList<ProgressionHomeOffer> HomeOffers { get; }
+        public string SelectedWeaponId { get; }
+        public IReadOnlyList<string> CompletedRegionIds { get; }
+        public long Revision { get; }
 
         public ProgressionProfileSnapshot(int confirmedCrystals, ProgressionProfileState state,
-            IEnumerable<string> unlockedIds = null, IEnumerable<ProgressionHomeOffer> homeOffers = null)
+            IEnumerable<string> unlockedIds = null, IEnumerable<ProgressionHomeOffer> homeOffers = null,
+            string selectedWeaponId = null, IEnumerable<string> completedRegionIds = null, long revision = 0)
         {
             ConfirmedCrystals = confirmedCrystals;
             State = state;
             UnlockedIds = ProgressionSnapshot.Copy(unlockedIds);
             HomeOffers = ProgressionSnapshot.Copy(homeOffers);
+            SelectedWeaponId = selectedWeaponId;
+            CompletedRegionIds = ProgressionSnapshot.Copy(completedRegionIds);
+            Revision = revision;
         }
     }
 
