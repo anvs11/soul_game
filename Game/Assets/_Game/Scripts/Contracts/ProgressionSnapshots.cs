@@ -63,11 +63,13 @@ namespace Game.Contracts
     {
         public string EffectId { get; }
         public ProgressionEffectKind Kind { get; }
+        public string SourceItemId { get; }
 
-        public ProgressionEffectSnapshot(string effectId, ProgressionEffectKind kind)
+        public ProgressionEffectSnapshot(string effectId, ProgressionEffectKind kind, string sourceItemId = null)
         {
             EffectId = effectId;
             Kind = kind;
+            SourceItemId = sourceItemId;
         }
     }
 
@@ -104,22 +106,28 @@ namespace Game.Contracts
     public sealed class ProgressionRunSnapshot
     {
         public string RunId { get; }
+        public string StageId { get; }
         public int Coins { get; }
         public int PendingCrystals { get; }
         public IReadOnlyList<ProgressionLootSnapshot> Loot { get; }
         public IReadOnlyList<ProgressionNpcSnapshot> Npcs { get; }
-        public ProgressionEffectSnapshot? ActiveBottleEffect { get; }
+        public IReadOnlyList<ProgressionEffectSnapshot> ActiveBottleEffects { get; }
+        public ProgressionEffectSnapshot? ActiveBottleEffect => ActiveBottleEffects.Count == 0
+            ? (ProgressionEffectSnapshot?)null : ActiveBottleEffects[ActiveBottleEffects.Count - 1];
 
         public ProgressionRunSnapshot(string runId, int coins, int pendingCrystals,
             IEnumerable<ProgressionLootSnapshot> loot = null, IEnumerable<ProgressionNpcSnapshot> npcs = null,
-            ProgressionEffectSnapshot? activeBottleEffect = null)
+            ProgressionEffectSnapshot? activeBottleEffect = null,
+            IEnumerable<ProgressionEffectSnapshot> activeBottleEffects = null, string stageId = null)
         {
             RunId = runId;
+            StageId = stageId;
             Coins = coins;
             PendingCrystals = pendingCrystals;
             Loot = ProgressionSnapshot.Copy(loot);
             Npcs = ProgressionSnapshot.Copy(npcs);
-            ActiveBottleEffect = activeBottleEffect;
+            ActiveBottleEffects = ProgressionSnapshot.Copy(activeBottleEffects ??
+                (activeBottleEffect.HasValue ? new[] { activeBottleEffect.Value } : null));
         }
     }
 

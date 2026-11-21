@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Game.Combat;
 using Game.Contracts;
 using Game.Input;
@@ -7,13 +8,32 @@ namespace Game.Actors
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(DamageReceiver), typeof(ActorMotor2D))]
-    public sealed class PlayerCombatFacade : MonoBehaviour, IPlayerCombatSource, IRunResourceSink
+    public sealed class PlayerCombatFacade : MonoBehaviour, IPlayerCombatSource, IProgressionCombatSink
     {
         private DamageReceiver receiver;
         private ActorMotor2D motor;
         private WeaponController weapon;
         private bool controlsEnabled = true;
         private bool deathSent;
+        public string FirearmInstanceId { get; private set; } = Guid.NewGuid().ToString("N");
+        public string BladeInstanceId { get; private set; } = Guid.NewGuid().ToString("N");
+        public string EquippedWeaponId
+        {
+            get
+            {
+                EnsureReferences();
+                if (weapon == null) return null;
+                return weapon.State.IsMelee ? BladeInstanceId : FirearmInstanceId;
+            }
+        }
+        public ProgressionWeaponKind EquippedWeaponKind
+        {
+            get
+            {
+                EnsureReferences();
+                return weapon != null && weapon.State.IsMelee ? ProgressionWeaponKind.Blade : ProgressionWeaponKind.Firearm;
+            }
+        }
         public bool IsDead { get { EnsureReferences(); return receiver.IsDead; } }
         public event Action<CombatSnapshot> Changed;
         public event Action Died;
@@ -22,6 +42,35 @@ namespace Game.Actors
         public event Action BackpackRequested;
         public event Action PauseRequested;
         private bool CanCollect => isActiveAndEnabled && controlsEnabled && Time.timeScale > 0f && !IsDead;
+
+        public void BindProgressionWeaponIds(string firearmId, string bladeId)
+        {
+            if (string.IsNullOrWhiteSpace(firearmId) || string.IsNullOrWhiteSpace(bladeId) || firearmId == bladeId)
+                throw new ArgumentException("Progression weapon IDs must be distinct and non-empty.");
+            FirearmInstanceId = firearmId;
+            BladeInstanceId = bladeId;
+        }
+
+        public void SetProgressionModifiers(IReadOnlyDictionary<string, ProgressionModuleKind> modules,
+            IReadOnlyList<ProgressionEffectSnapshot> bottleEffects)
+        {
+            if (this == null) return;
+            EnsureReferences();
+            if (weapon != null)
+            {
+                weapon.State.ProgressionShotIntervalMultiplier =
+                    modules.TryGetValue(FirearmInstanceId, out var firearm) && firearm == ProgressionModuleKind.FasterFire
+                        ? .8f : 1f;
+                weapon.State.ProgressionKnifeDamageMultiplier =
+                    modules.TryGetValue(BladeInstanceId, out var blade) && blade == ProgressionModuleKind.SharpenedBlade
+                        ? 1.25f : 1f;
+            }
+
+            float movement = 1f;
+            foreach (var effect in bottleEffects)
+                movement *= effect.Kind == ProgressionEffectKind.Beneficial ? 1.2f : .8f;
+            motor.ProgressionMovementMultiplier = movement;
+        }
         public int TryAddReserve(int amount)
         {
             if (!CanCollect || weapon == null) return 0;

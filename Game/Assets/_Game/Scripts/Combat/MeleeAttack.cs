@@ -26,7 +26,7 @@ namespace Game.Combat
             var filter = new ContactFilter2D { useTriggers = false };
             filter.SetLayerMask(mask);
             Physics2D.OverlapCircle(origin, Radius, filter, candidates);
-            var packet = new DamagePacket(ownerActorId, Damage, attackId: attackId);
+            var packet = new DamagePacket(ownerActorId, Damage * state.ProgressionKnifeDamageMultiplier, attackId: attackId);
             foreach (var collider in candidates)
             {
                 if (collider == null) continue;

@@ -14,6 +14,8 @@ namespace Game.Combat
         public float Stamina { get; private set; } = MaximumStamina;
         public float MaxStamina => MaximumStamina;
         public bool IsMelee => !Selected;
+        internal float ProgressionShotIntervalMultiplier { get; set; } = 1f;
+        internal float ProgressionKnifeDamageMultiplier { get; set; } = 1f;
         public int Magazine { get; private set; }
         public int ReserveAmmo { get; private set; }
         public const int PickupReserveLimit = 96;
@@ -84,7 +86,9 @@ namespace Game.Combat
         {
             if (!Selected || IsReloading || cooldown > .000001f || Magazine == 0 || spawner == null) return false;
             if (!spawner.TrySpawn(in request)) return false;
-            Magazine--; cooldown = definition.ShotInterval; return true;
+            Magazine--;
+            cooldown = definition.ShotInterval * ProgressionShotIntervalMultiplier;
+            return true;
         }
     }
 }

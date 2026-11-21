@@ -18,6 +18,7 @@ namespace Game.Actors
         private PlayerDodgeController dodge;
         private DamageReceiver health;
         public bool CombatActive => controlsEnabled && isActiveAndEnabled && (health == null || !health.IsDead);
+        internal float ProgressionMovementMultiplier { get; set; } = 1f;
         public ActorActionPermissions Permissions
         {
             get
@@ -123,7 +124,9 @@ namespace Game.Actors
                 if (step + .0001f < dodgeStep) dodge.CancelMotion();
                 return;
             }
-            body.linearVelocity = Permissions.CanMove ? Vector2.ClampMagnitude(CurrentCommand.Move, 1f) * speed * statuses.MovementMultiplier : Vector2.zero;
+            body.linearVelocity = Permissions.CanMove
+                ? Vector2.ClampMagnitude(CurrentCommand.Move, 1f) * speed * statuses.MovementMultiplier * ProgressionMovementMultiplier
+                : Vector2.zero;
         }
 
         // Cast the actual attached body shape; stop short of walls/doors, never teleport.
