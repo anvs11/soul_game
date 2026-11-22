@@ -399,3 +399,9 @@ Unity-компиляция, импорт и генерация .meta, приме
 Оконный замер Mac16,8 / Apple M4 Pro / Mac OS X26.2.0 /1280×720:512 samples/5.004356384с, interval avg13.89755344мс/p95 14.06416512мс, GC available. BuildId/scenario совпали, полный Player-windowed.log сохранён. Это automated-windowed-seeds0-123-not-manual, не стресс/телефон. Первый batch достиг18000 samples раньше5с и не принимается как performance. Stage2 tool limits обходятся конкретной процедурой output/metadata/XML/полного лога, ограничения точных пиков/Android не устранены.
 
 Windows/Android builders реально PreflightFailed/exit1: отсутствуют модули, BuildReport/Players/APK не получены, телефон NOT RUN. Оба Player shutdown показывают ComputeBuffer disposal и native allocations без атрибуции: memory acceptance OPEN. Ручной бой/AI-сложность/3 seed/fallback, карта/Rest/отложенная волна и выбранное Android-устройство остаются OPEN. S3-08/вся Stage3 не Done, самостоятельной приёмки двух людей нет. Acceptance Game/Docs/S3_08_ACCEPTANCE.md содержит матрицу/API/артефакты/следующий ограниченный шаг. Локальная фиксация15 явных путей после полного staged diff; XML/Builds/Library/секреты/чужие черновики исключены, push/merge не выполняются.
+
+## 22 ноября 2026 — У2 / S5-06 и S5-08
+
+В `feat/stage5-economy-ui` интеграция `016b7fe2665929327d44e93dd9a27c32a9a2c460` подключает сервис У1 к Bootstrap, Home и 1-1. Игровой City поддерживает кристаллы с подтверждением по Cleared, профиль, покупку стартового оружия, обыск, обоих скрытых NPC и их боевые эффекты.
+
+Unity 6000.3.28f1 на Windows 11 прошла 187/187 EditMode и 136/136 PlayMode. Проверены десять попыток с разными исходами. Чистый Windows Player `s5-20261122-135825-f34031cf` прошёл покупку и два повторных запуска с тем же профилем. Git подтвердил присутствие коммитов обеих ролей. Мобильная приёмка открыта до доступа к Android. [S5-08 и BuildReport](../Game/Docs/S5_08_ACCEPTANCE.md)
