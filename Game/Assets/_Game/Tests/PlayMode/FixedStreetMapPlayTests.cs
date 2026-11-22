@@ -1,10 +1,12 @@
 using System;
 using System.Collections;
+using System.IO;
 using Game.Actors;
 using Game.AI;
 using Game.Combat;
 using Game.Core;
 using Game.Encounters;
+using Game.Progression;
 using System.Linq;
 using Game.Input;
 using Game.StreetMap;
@@ -587,6 +589,168 @@ namespace Game.Tests
             }
             Assert.That(room.State.Phase, Is.EqualTo(RoomPhase.Cleared));
         }
+
+        [UnityTest]
+        public IEnumerator Stage5City_TenAttemptsPersistOnlyClearedRoomsAndReloadThePurchasedPistol()
+        {
+            string saves = CityTestDirectory();
+            boot.Coordinator.SetStage5Runtime(new Stage5Runtime(saves));
+            var ids = new System.Collections.Generic.HashSet<string>();
+            int balance = 0;
+            bool unlocked = false;
+            for (int i = 0; i < 10; i++)
+            {
+                yield return StartCity(i == 0 ? 5 : i);
+                var coordinator = boot.Coordinator;
+                var map = Object.FindFirstObjectByType<StreetMapScreen>();
+                var body = map.Player.GetComponent<Rigidbody2D>();
+                var service = coordinator.Stage5.Session;
+                Assert.That(ids.Add(coordinator.RunId), Is.True);
+                Assert.That(service.Snapshot.Run.RunId, Is.EqualTo(coordinator.RunId));
+                Assert.That(service.Snapshot.Run.Coins, Is.Zero);
+                Assert.That(map.Player.ReadSnapshot().MagazineCapacity, Is.EqualTo(unlocked ? 10 : 8));
+                if (i == 0) Assert.That(service.Snapshot.Run.Npcs, Is.Empty);
+                var outcome = i % 3 == 0 ? RunOutcome.Defeat : i % 3 == 1 ? RunOutcome.Abandoned : RunOutcome.Victory;
+                if (i == 0)
+                {
+                    Park(body, StreetMapLayout.Rooms[1].Center);
+                    yield return Until(() => map.Rooms[0].State.AliveCount >= 6);
+                    var killed = Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                        .First(item => item is IEnemyTarget target && !target.IsDead);
+                    Kill(killed);
+                    Park(body, killed.transform.position);
+                    yield return Until(() => service.Snapshot.Run.PendingCrystals > 0);
+                    Assert.That(service.Snapshot.Profile.ConfirmedCrystals, Is.Zero);
+                }
+                else
+                {
+                    int rooms = outcome == RunOutcome.Victory ? 4 : 1;
+                    for (int roomIndex = 0; roomIndex < rooms; roomIndex++)
+                    {
+                        var room = map.Rooms[roomIndex];
+                        balance += room.State.Plan.Waves.SelectMany(w => w.Spawns)
+                            .Sum(spawn => CityEconomy.RollLoot(i, spawn.SpawnId, spawn.EnemyTypeId).Crystals);
+                        if (roomIndex < 3) yield return ClearPreviewRoom(map, body, roomIndex);
+                        else
+                        {
+                            Park(body, StreetMapLayout.Rooms[4].Center);
+                            yield return Until(() => room.State.AliveCount == 3);
+                            foreach (var enemy in Object.FindObjectsByType<EliteEnemy>(FindObjectsSortMode.None)) Kill(enemy);
+                            yield return Until(() => map.Portal.IsOpen);
+                        }
+                    }
+                    Assert.That(service.Snapshot.Profile.ConfirmedCrystals, Is.EqualTo(balance));
+                }
+
+                if (outcome == RunOutcome.Defeat) Apply(map.Player.GetComponent<DamageReceiver>(), 999);
+                else if (outcome == RunOutcome.Abandoned) map.Leave();
+                else
+                {
+                    Park(body, map.Portal.transform.position);
+                    map.TryExit();
+                }
+                yield return Until(() => coordinator.Phase == RunPhase.Home);
+                Assert.That(coordinator.LastOutcome, Is.EqualTo(outcome));
+                Assert.That(service.Snapshot.Run, Is.Null);
+                Assert.That(service.Snapshot.Profile.ConfirmedCrystals, Is.EqualTo(balance));
+
+                var home = Object.FindFirstObjectByType<HomeScreen>();
+                Assert.That(home.GetComponentsInChildren<Text>().Any(t => t.text.Contains($"баланс в убежище: {balance}")), Is.True);
+                if (i == 1)
+                {
+                    home.PrimaryButton.onClick.Invoke();
+                    FindPreviewButton("Профиль City").onClick.Invoke();
+                    var buy = FindPreviewButton("Открыть городской пистолет · 20");
+                    Assert.That(buy, Is.Not.Null);
+                    buy.onClick.Invoke();
+                    balance -= 20;
+                    unlocked = true;
+                }
+                if (i == 0 || i == 1 || i == 4)
+                {
+                    coordinator.SetStage5Runtime(new Stage5Runtime(saves));
+                    Assert.That(coordinator.Stage5.Session.Snapshot.Profile.ConfirmedCrystals, Is.EqualTo(balance));
+                    Assert.That(coordinator.Stage5.Session.Snapshot.Profile.SelectedWeaponId, Is.EqualTo(unlocked ? "pistol-city" : "pistol"));
+                }
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Stage5City_ConnectsBothNpcOffersAndClearsTheActualBottleEffect()
+        {
+            boot.Coordinator.SetStage5Runtime(new Stage5Runtime(CityTestDirectory()));
+            foreach (int seed in new[] { 0, 7 })
+            {
+                yield return StartCity(seed);
+                var map = Object.FindFirstObjectByType<StreetMapScreen>();
+                var city = boot.Coordinator.Stage5.Session;
+                var view = map.GetComponent<Stage5PreviewController>();
+                var body = map.Player.GetComponent<Rigidbody2D>();
+                Assert.That(city.Snapshot.Run.Npcs.Count, Is.EqualTo(2));
+                Park(body, Stage5PreviewController.BrokerRoad);
+                view.TryVisit();
+                Vector2 broker = body.position;
+                Park(body, broker + Vector2.up * 4.2f);
+                view.TryVisit();
+                yield return Until(() => FindPreviewButton("Согласиться · Tab") != null);
+                FindPreviewButton("Согласиться · Tab").onClick.Invoke();
+                yield return Until(() => GameObject.Find("Ответ").GetComponent<Text>().text.Contains("Не хватает монет"));
+                FindPreviewButton("Отказаться · E").onClick.Invoke();
+                Park(body, broker);
+                view.TryVisit();
+                yield return ClearPreviewRoom(map, body, 0);
+                Assert.That(view.Coins, Is.GreaterThanOrEqualTo(3));
+                Park(body, Stage5PreviewController.BrokerRoad);
+                view.TryVisit();
+                Park(body, broker + Vector2.up * 4.2f);
+                view.TryVisit();
+                yield return Until(() => FindPreviewButton("Согласиться · Tab") != null);
+                FindPreviewButton("Согласиться · Tab").onClick.Invoke();
+                Assert.That(city.Snapshot.Run.Npcs.Single(n => n.Kind == Game.Contracts.ProgressionNpcKind.WeaponDealer).State,
+                    Is.EqualTo(Game.Contracts.ProgressionNpcState.Working));
+                Park(body, broker);
+                view.TryVisit();
+                yield return new WaitForSeconds(2.1f);
+                Park(body, Stage5PreviewController.BrokerRoad);
+                view.TryVisit();
+                Park(body, broker + Vector2.up * 4.2f);
+                map.TryExit();
+                Assert.That(city.Snapshot.Run.Npcs.Single(n => n.Kind == Game.Contracts.ProgressionNpcKind.WeaponDealer).State,
+                    Is.EqualTo(Game.Contracts.ProgressionNpcState.ItemUsed));
+                Park(body, broker);
+                view.TryVisit();
+                yield return ClearPreviewRoom(map, body, 1);
+                Park(body, Stage5PreviewController.DealerRoad);
+                view.TryVisit();
+                Vector2 dealer = body.position;
+                Park(body, dealer + Vector2.up * 4.2f);
+                view.TryVisit();
+                yield return Until(() => FindPreviewButton("Согласиться · Tab") != null);
+                FindPreviewButton("Согласиться · Tab").onClick.Invoke();
+                Assert.That(city.Snapshot.Run.ActiveBottleEffects, Is.Empty);
+                map.TryExit();
+                Assert.That(city.Snapshot.Run.ActiveBottleEffect?.Kind, Is.EqualTo(seed == 0
+                    ? Game.Contracts.ProgressionEffectKind.Beneficial : Game.Contracts.ProgressionEffectKind.Harmful));
+                Park(body, dealer);
+                view.TryVisit();
+                yield return ClearPreviewRoom(map, body, 2);
+                Assert.That(city.Snapshot.Run.ActiveBottleEffects, Is.Empty);
+                map.Leave();
+                yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
+            }
+        }
+
+        private IEnumerator StartCity(int seed)
+        {
+            var home = Object.FindFirstObjectByType<HomeScreen>();
+            if (home.IsShowingResult) home.PrimaryButton.onClick.Invoke();
+            home.FixedSeedInput.text = seed.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            home.Stage5CityButton.onClick.Invoke();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.InArena, boot.Coordinator.Error);
+        }
+
+        private static string CityTestDirectory() => Path.Combine(Directory.GetParent(Application.dataPath).FullName,
+            "TestResults", "Saves", "stage5-integration-" + Guid.NewGuid().ToString("N"));
 
         [UnityTest]
         public IEnumerator SeededHome_RejectsInvalidInputAndStartsAllOrdinaryEnemiesTogether()

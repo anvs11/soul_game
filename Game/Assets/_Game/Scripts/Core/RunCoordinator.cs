@@ -24,11 +24,20 @@ namespace Game.Core
         public RunRequest CurrentRequest { get; private set; }
         public RunOutcome? LastOutcome { get; private set; }
         public string Error { get; private set; } = "";
+        public Stage5Runtime Stage5 { get; private set; }
+        public bool Stage5FinishBlocked { get; private set; }
         public event Action Changed;
 
-        public RunCoordinator(ISceneFlow sceneFlow)
+        public RunCoordinator(ISceneFlow sceneFlow, Stage5Runtime stage5 = null)
         {
             this.sceneFlow = sceneFlow ?? throw new ArgumentNullException(nameof(sceneFlow));
+            Stage5 = stage5;
+        }
+
+        public void SetStage5Runtime(Stage5Runtime stage5)
+        {
+            if (Phase != RunPhase.Home) throw new InvalidOperationException("Select the profile from Home.");
+            Stage5 = stage5 ?? throw new ArgumentNullException(nameof(stage5));
         }
 
         public void Begin()
@@ -62,6 +71,18 @@ namespace Game.Core
 
             if (request.IsStage2Route && request.ArenaId != ScenePaths.Stage2CombatSandbox)
                 throw new ArgumentException("Stage 2 route must start in its ordinary arena.", nameof(request));
+            string id = null;
+            if (request.IsStage5City)
+            {
+                if (Stage5 == null || request.FixedEncounter == null) throw new InvalidOperationException("City requires a profile and encounter plan.");
+                var result = Stage5.Start(request.Seed, out id);
+                if (result.Failure != ProgressionFailure.None)
+                {
+                    Error = Stage5Runtime.Describe(result.Failure);
+                    Changed?.Invoke();
+                    return;
+                }
+            }
             StreetRoute = request.IsStreetRun ? requestedStreetRoute ?? Game.Street.StreetRoute.Fixed() : null;
             StreetGeneration = request.IsStreetRun ? requestedGeneration : null;
             SegmentIndex = request.IsStreetRun ? 1 : 0;
@@ -69,15 +90,16 @@ namespace Game.Core
             ActiveArena = request.ArenaId;
             PlayerTransfer = null;
             pendingAdvance = null;
-            RunId = Guid.NewGuid().ToString("N");
+            RunId = id ?? Guid.NewGuid().ToString("N");
             LastOutcome = null;
             pendingOutcome = null;
+            Stage5FinishBlocked = false;
             Load(request.ArenaId, RunPhase.LoadingArena, RunPhase.InArena);
         }
 
         public void FinishRun(RunOutcome outcome)
         {
-            if (disposed || Phase != RunPhase.InArena) return;
+            if (disposed || Phase != RunPhase.InArena || Stage5FinishBlocked) return;
             if (!Enum.IsDefined(typeof(RunOutcome), outcome))
                 throw new ArgumentOutOfRangeException(nameof(outcome));
             if (!pendingOutcome.HasValue || Priority(outcome) > Priority(pendingOutcome.Value))
@@ -98,8 +120,9 @@ namespace Game.Core
         public void ResolvePendingFinish()
         {
             if (disposed || Phase != RunPhase.InArena) return;
-            if (pendingOutcome.HasValue)
+            if (pendingOutcome.HasValue && !Stage5FinishBlocked)
             {
+                if (CurrentRequest.IsStage5City && !SaveStage5Finish(pendingOutcome.Value)) return;
                 LastOutcome = pendingOutcome;
                 pendingOutcome = null;
                 pendingAdvance = null;
@@ -130,10 +153,35 @@ namespace Game.Core
         public void RetryHome()
         {
             if (disposed || Phase != RunPhase.Faulted) return;
+            if (CurrentRequest.IsStage5City && Stage5.Session.Snapshot.Run != null &&
+                !SaveStage5Finish(RunOutcome.Abandoned)) return;
             pendingOutcome = null;
             pendingAdvance = null;
             PlayerTransfer = null;
             Load(ScenePaths.Home, RunPhase.ReturningHome, RunPhase.Home);
+        }
+
+        public void RetryStage5Finish()
+        {
+            if (Stage5FinishBlocked && Phase == RunPhase.InArena)
+            {
+                Stage5FinishBlocked = false;
+                ResolvePendingFinish();
+            }
+        }
+
+        private bool SaveStage5Finish(RunOutcome outcome)
+        {
+            var result = Stage5.Finish(RunId, outcome);
+            if (result.Failure == ProgressionFailure.None)
+            {
+                Stage5FinishBlocked = false;
+                return true;
+            }
+            Error = Stage5Runtime.Describe(result.Failure);
+            Stage5FinishBlocked = true;
+            Changed?.Invoke();
+            return false;
         }
 
         private void Load(string scene, RunPhase loading, RunPhase ready)

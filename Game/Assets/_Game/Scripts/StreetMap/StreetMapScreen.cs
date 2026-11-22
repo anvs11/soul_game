@@ -74,11 +74,14 @@ namespace Game.StreetMap
             var portal=new GameObject("FinalPortal");portal.transform.SetParent(transform,false);
             Portal=portal.AddComponent<FixedMapPortal>();Portal.Initialize(player.GetComponent<SpriteRenderer>().sprite);
             controls = GetComponent<BattleControls>() ?? gameObject.AddComponent<BattleControls>();
-            controls.Initialize(TogglePause, Resume, Leave, enableDodge: true, enableNpc: value.CurrentRequest.IsStage5Preview);
-            if (value.CurrentRequest.IsStage5Preview)
+            bool stage5 = value.CurrentRequest.IsStage5Preview || value.CurrentRequest.IsStage5City;
+            controls.Initialize(TogglePause, Resume, Leave, enableDodge: true, enableNpc: stage5);
+            if (stage5)
             {
                 preview = gameObject.AddComponent<Stage5PreviewController>();
                 preview.Initialize(this, value, controls);
+                if (value.CurrentRequest.IsStage5City)
+                    foreach (var room in Rooms) room.CanBeginEncounter = () => !preview.HasPendingCheckpoint;
             }
             if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = false;
             player.Died += OnPlayerDied;
@@ -237,7 +240,7 @@ namespace Game.StreetMap
                 }
             }
             RoomCleared?.Invoke(room.RunId,room.RoomId);
-            if(ClearedCount==4)Portal.TryOpen(player);
+            if(ClearedCount==4 && preview?.HasPendingCheckpoint != true)Portal.TryOpen(player);
         }
         private void Drop(RoomController room, PickupKind kind, Vector2 position)
         {
@@ -279,6 +282,7 @@ namespace Game.StreetMap
         public void TryExit()
         {
             if(run==null || run.Phase!=RunPhase.InArena || IsPaused || player.IsDead)return;
+            if (preview?.RetryCheckpoint() == true) return;
             if ((preview != null && preview.TryUseInteract()) || TryPickup() || ClearedCount != 4) return;
             if(!Portal.TryOpen(player)){UpdateRoomLabel();return;}
             UpdateRoomLabel();
@@ -310,6 +314,13 @@ namespace Game.StreetMap
         private void OnApplicationPause(bool paused) { if (paused) Pause(); }
         private void OnPhaseChanged()
         {
+            if (run.Stage5FinishBlocked && run.Phase == RunPhase.InArena)
+            {
+                player.SetControlsEnabled(false);
+                controls.ClearHeld();
+                Time.timeScale = 0;
+                return;
+            }
             bool active = run != null && run.Phase == RunPhase.InArena && !player.IsDead;
             player.SetControlsEnabled(active);
             if (active) return;

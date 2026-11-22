@@ -12,9 +12,10 @@ namespace Game.UI
         private readonly Text supplyTitle, backpackLabel;
         private readonly Button applyMedkit, storeMedkit;
         private readonly Text rewardTitle, rewardDescription;
+        private readonly Button retrySave;
 
         public Stage5PreviewView(RectTransform safe, Action accept, Action decline,
-            Action backpack, Action apply, Action store, Action closeSupply)
+            Action backpack, Action apply, Action store, Action closeSupply, Action retry)
         {
             balance = Label("Баланс", safe, Vector2.up * -28, new Vector2(390, 47), 17);
             balance.rectTransform.anchorMin = balance.rectTransform.anchorMax = new Vector2(.5f, 1);
@@ -51,7 +52,11 @@ namespace Game.UI
             backing.raycastTarget = false;
             rewardDescription = Label("Описание находки", detail, Vector2.zero, new Vector2(355, 40), 17);
             RenderReward(null, null);
+            retrySave = Button("Повторить сохранение", safe, Vector2.zero, retry);
+            retrySave.gameObject.SetActive(false);
         }
+
+        public void RenderSaveRetry(string error) => retrySave.gameObject.SetActive(error != null);
 
         public void RenderReward(string title, string description)
         {

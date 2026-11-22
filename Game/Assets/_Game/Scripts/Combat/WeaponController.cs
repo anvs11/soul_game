@@ -23,6 +23,14 @@ namespace Game.Combat
         private long attackId;
         public event Action Changed;
         public WeaponRuntimeState State => state ?? (state = new WeaponRuntimeState(definition));
+        internal void EquipCityStarter()
+        {
+            var starter = Resources.Load<WeaponDefinition>("Stage5CityPistol");
+            if (starter == null) throw new InvalidOperationException("The City starter weapon resource is missing.");
+            var replacement = new WeaponRuntimeState(starter);
+            definition = starter;
+            state = replacement;
+        }
         public void Configure(WeaponDefinition settings, MonoBehaviour spawner)
         {
             if (isActiveAndEnabled || state != null) throw new InvalidOperationException("Configure a disabled, unused controller.");

@@ -24,6 +24,7 @@ namespace Game.StreetMap
         public string RoomId => room.RoomId;
         public IReadOnlyList<DoorController> Doors => doors;
         public event Action<RoomController> Cleared;
+        internal Func<bool> CanBeginEncounter { get; set; }
         public event Action<RoomController, string, string, Vector2> EnemyDefeated;
 
         public void Configure(string runId, EncounterRoom description, RoomPlan plan, PlayerCombatFacade player, TargetRegistry registry, MonoBehaviour[] actors, DoorController[] gates, Stage4CombatAssets combatAssets = null)
@@ -103,6 +104,7 @@ namespace Game.StreetMap
             if (hero.IsDead) { Cancel(); return; }
             if (State.Phase == RoomPhase.Dormant)
             {
+                if (CanBeginEncounter?.Invoke() == false) return;
                 if (!HeroFullyInside()) return;
                 foreach (var door in doors) if (!door.CanClose()) return;
                 foreach (var door in doors)

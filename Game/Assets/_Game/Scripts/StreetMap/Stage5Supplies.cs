@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Game.Actors;
+using Game.Contracts;
 using UnityEngine;
 
 namespace Game.StreetMap
@@ -10,6 +11,7 @@ namespace Game.StreetMap
         private sealed class Cache
         {
             public Vector2 Approach;
+            public string Id;
             public Vector2 ArmorDropOffset;
             public string Prompt;
             public bool Medkit;
@@ -23,30 +25,33 @@ namespace Game.StreetMap
         private readonly PlayerCombatFacade hero;
         private readonly Stage5PreviewController map;
         private readonly Func<Vector2, float, bool> near;
+        private readonly Func<string, ProgressionSupplyKind, int, float> apply;
         private string corpseWithArmor;
         private readonly int corpseArmor;
         private Cache selected;
         private bool backpackOpen;
-        private int medkits;
+        private readonly Stack<string> medkits = new();
         public bool Open => selected != null || backpackOpen;
         public string Notice { get; private set; }
-        public int BackpackMedkits => medkits;
+        public int BackpackMedkits => medkits.Count;
         public bool FoundMedkit => selected != null;
         public bool CanHeal
         {
             get
             {
                 var status = hero.ReadSnapshot();
-                return (FoundMedkit || medkits > 0) && status.Health < status.MaxHealth;
+                return (FoundMedkit || medkits.Count > 0) && status.Health < status.MaxHealth;
             }
         }
 
         public Stage5Supplies(Stage5PreviewController map, Stage5PreviewSession session,
-            PlayerCombatFacade hero, Func<Vector2, float, bool> near, string corpseWithArmor)
+            PlayerCombatFacade hero, Func<Vector2, float, bool> near, string corpseWithArmor,
+            Func<string, ProgressionSupplyKind, int, float> apply)
         {
             this.map = map;
             this.hero = hero;
             this.near = near;
+            this.apply = apply;
             this.corpseWithArmor = corpseWithArmor;
             corpseArmor = corpseWithArmor == null ? 0 : RollArmorAmount(session, corpseWithArmor);
             int medkitBudget = 2;
@@ -70,6 +75,7 @@ namespace Game.StreetMap
                 var cache = new Cache
                 {
                     Approach = position - Vector2.right * side * 1.14f,
+                    Id = key,
                     ArmorDropOffset = -Vector2.right * side * .64f,
                     Prompt = "E · Обыскать машину",
                     Medkit = medkit,
@@ -122,6 +128,7 @@ namespace Game.StreetMap
             caches.Add(new Cache
             {
                 Approach = position + (obstacle ? Vector2.right * .72f : Vector2.zero),
+                Id = key,
                 ArmorDropOffset = obstacle ? Vector2.right * .64f : Vector2.zero,
                 Prompt = prompt,
                 Armor = amount,
@@ -160,6 +167,7 @@ namespace Game.StreetMap
                 caches.Add(new Cache
                 {
                     Approach = location,
+                    Id = cache.Id,
                     Prompt = "E · Подобрать броню",
                     Armor = cache.Armor,
                     Highlight = plate
@@ -174,7 +182,7 @@ namespace Game.StreetMap
                 selected = cache;
                 return true;
             }
-            float accepted = hero.TryRepair(cache.Armor);
+            float accepted = apply(cache.Id + "/armor", ProgressionSupplyKind.Armor, (int)cache.Armor);
             if (accepted > 0) cache.Armor = 0;
             Notice = accepted > 0 ? "Броня восстановлена" : "Броня полная";
             SyncHighlight(cache);
@@ -192,17 +200,18 @@ namespace Game.StreetMap
         public void Store()
         {
             if (!FoundMedkit) return;
-            medkits++;
+            medkits.Push(selected.Id);
             ConsumeFound();
         }
 
         public void Apply()
         {
-            if (!Open || (!FoundMedkit && medkits == 0)) return;
-            float restored = hero.TryHeal(10);
+            if (!Open || (!FoundMedkit && medkits.Count == 0)) return;
+            string id = FoundMedkit ? selected.Id : medkits.Peek();
+            float restored = apply(id + "/medkit", ProgressionSupplyKind.Medkit, 10);
             if (restored <= 0) return;
             if (FoundMedkit) ConsumeFound();
-            else medkits--;
+            else medkits.Pop();
             Notice = $"Здоровье +{restored:0.##}";
         }
 

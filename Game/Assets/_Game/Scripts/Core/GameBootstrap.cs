@@ -26,7 +26,7 @@ namespace Game.Core
             DontDestroyOnLoad(gameObject);
             Time.timeScale = 1f;
             var sceneFlow = GetComponent<SceneFlow>();
-            Coordinator = new RunCoordinator(sceneFlow);
+            Coordinator = new RunCoordinator(sceneFlow, Stage5Runtime.ForApplication());
             sceneFlow.Initialize(Coordinator);
         }
 
