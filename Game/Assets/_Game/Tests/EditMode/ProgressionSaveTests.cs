@@ -196,6 +196,30 @@ namespace Game.Tests
         }
 
         [Test]
+        public void CityStarterSelectionSurvivesRestartWithoutChargingAgain()
+        {
+            var repository = new JsonSaveRepository(folder);
+            Store(repository, 0, 31);
+            var session = new CityProgressionSession(() => 0, repository);
+            Assert.That(session.SelectStarter(new ProgressionCommandKey(null, "locked"), "pistol-city").Failure,
+                Is.EqualTo(ProgressionFailure.UnknownTarget));
+            AssertApplied(session.BuyHomeUnlock(new ProgressionCommandKey(null, "purchase"), "unlock-city-pistol"));
+
+            var key = new ProgressionCommandKey(null, "choose-basic");
+            AssertApplied(session.SelectStarter(key, "pistol"));
+            long revision = session.Snapshot.Profile.Revision;
+            var reopened = new CityProgressionSession(() => 0, repository);
+            Assert.That(reopened.SelectStarter(key, "pistol").Status, Is.EqualTo(ProgressionStatus.Replayed));
+            Assert.That(reopened.Snapshot.Profile.Revision, Is.EqualTo(revision));
+            Assert.That(reopened.Snapshot.Profile.ConfirmedCrystals, Is.EqualTo(11));
+            Assert.That(reopened.Snapshot.Profile.UnlockedIds, Does.Contain("pistol-city"));
+            AssertApplied(reopened.StartRun(Key("start"), 5, Array.Empty<ProgressionTransitionPoint>()));
+            Assert.That(reopened.Snapshot.Run.StartingWeaponId, Is.EqualTo("pistol"));
+            Assert.That(reopened.SelectStarter(new ProgressionCommandKey(null, "in-combat"), "pistol-city").Failure,
+                Is.EqualTo(ProgressionFailure.WrongPhase));
+        }
+
+        [Test]
         public void FailedHomePurchaseAndStaleSessionRetryDoNotChargeTwice()
         {
             var repository = new JsonSaveRepository(folder);

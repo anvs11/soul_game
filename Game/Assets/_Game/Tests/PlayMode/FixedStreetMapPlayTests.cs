@@ -430,12 +430,17 @@ namespace Game.Tests
             yield return Until(() => GameObject.Find("Подсказка NPC").GetComponent<Text>().text.Contains("Обыскать тело · Броня"));
             Assert.That(map.Player.TryRepair(99), Is.EqualTo(9));
             map.TryExit();
-            Assert.That(corpseArmor.activeSelf, Is.True);
+            Assert.That(corpseArmor.activeSelf, Is.False);
+            var corpseDrop = GameObject.Find("Броня на земле");
+            Assert.That(corpseDrop, Is.Not.Null);
+            Park(body, corpseDrop.transform.position);
+            map.TryExit();
+            Assert.That(corpseDrop.activeSelf, Is.True, "A full armor bar leaves the revealed plate on the ground.");
             yield return new WaitForSeconds(.55f);
             Apply(map.Player.GetComponent<DamageReceiver>(), 2);
             map.TryExit();
             Assert.That(map.Player.ReadSnapshot().Armor, Is.EqualTo(30));
-            Assert.That(corpseArmor.activeSelf, Is.False, "Applying any armor must consume the corpse's armor find.");
+            Assert.That(corpseDrop.activeSelf, Is.False, "Applying any armor must consume the revealed plate.");
             yield return new WaitForSeconds(.55f);
             Apply(map.Player.GetComponent<DamageReceiver>(), 5);
             map.TryExit();
@@ -738,6 +743,183 @@ namespace Game.Tests
                 map.Leave();
                 yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
             }
+        }
+
+        [UnityTest]
+        public IEnumerator Stage6City_TutorialCanBeSkippedAndReplayedFromHome()
+        {
+            string saves = CityTestDirectory();
+            boot.Coordinator.SetStage5Runtime(new Stage5Runtime(saves));
+            yield return StartCity(5);
+            var map = Object.FindFirstObjectByType<StreetMapScreen>();
+            Assert.That(GameObject.Find("City facades and street surface"), Is.Not.Null);
+            Assert.That(GameObject.Find("Подсказка City").GetComponent<Text>().text, Does.Contain("WASD"));
+            map.Pause();
+            yield return null;
+            Assert.That(FindPreviewButton("Пропустить"), Is.Null);
+            map.Resume();
+            yield return Until(() => FindPreviewButton("Пропустить") != null);
+            FindPreviewButton("Дальше").onClick.Invoke();
+            Assert.That(GameObject.Find("Подсказка City").GetComponent<Text>().text, Does.Contain("Space"));
+            FindPreviewButton("Пропустить").onClick.Invoke();
+            map.Leave();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
+            boot.Coordinator.SetStage5Runtime(new Stage5Runtime(saves));
+
+            yield return StartCity(5);
+            Assert.That(FindPreviewButton("Пропустить"), Is.Null);
+            Object.FindFirstObjectByType<StreetMapScreen>().Leave();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
+            var home = Object.FindFirstObjectByType<HomeScreen>();
+            home.PrimaryButton.onClick.Invoke();
+            FindPreviewButton("Профиль City").onClick.Invoke();
+            FindPreviewButton("Повторить обучение").onClick.Invoke();
+            yield return StartCity(5);
+            Assert.That(FindPreviewButton("Пропустить"), Is.Not.Null);
+        }
+
+        [UnityTest]
+        public IEnumerator Stage7City_TabAppliesMedkitAndTalksToRealDealer()
+        {
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            var pump = new GameObject("Stage7 keyboard").AddComponent<MapTestInputPump>();
+            Object.DontDestroyOnLoad(pump.gameObject);
+            var update = InputSystem.settings.updateMode;
+            var background = InputSystem.settings.backgroundBehavior;
+            var editorInput = InputSystem.settings.editorInputBehaviorInPlayMode;
+            InputSystem.settings.updateMode = InputSettings.UpdateMode.ProcessEventsManually;
+            InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            try
+            {
+                boot.Coordinator.SetStage5Runtime(new Stage5Runtime(CityTestDirectory()));
+                yield return StartCity(11);
+                var map = Object.FindFirstObjectByType<StreetMapScreen>();
+                var body = map.Player.GetComponent<Rigidbody2D>();
+                var room = StreetMapLayout.Rooms[1];
+                var car = map.GetComponentsInChildren<BoxCollider2D>().Single(item => item.name == "Сгоревшая машина" &&
+                    room.Bounds.Contains(Vector2Int.FloorToInt(item.transform.position)));
+                var origin = (Vector2)car.transform.position;
+                Park(body, origin + Vector2.right * Mathf.Sign(room.Center.x - origin.x) * 1.14f);
+                Apply(map.Player.GetComponent<DamageReceiver>(), 60);
+                map.TryExit();
+                yield return Until(() => FindPreviewButton("Применить · Tab") != null);
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
+                yield return Until(() => map.Player.ReadSnapshot().Health == 80);
+                yield return null;
+                Assert.That(map.Player.ReadSnapshot().Health, Is.EqualTo(80));
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                map.Leave();
+                yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
+
+                yield return StartCity(0);
+                map = Object.FindFirstObjectByType<StreetMapScreen>();
+                body = map.Player.GetComponent<Rigidbody2D>();
+                var preview = map.GetComponent<Stage5PreviewController>();
+                var wall = Object.FindObjectsByType<BoxCollider2D>(FindObjectsSortMode.None).First(item => item.name.StartsWith("Wall_", StringComparison.Ordinal));
+                Assert.That(wall.enabled && wall.GetComponent<SpriteRenderer>().forceRenderingOff, Is.True);
+                Park(body, Stage5PreviewController.DealerRoad);
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
+                yield return Until(() => preview.IsInside);
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                yield return null;
+                Park(body, body.position + Vector2.up * 4.2f);
+                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
+                yield return Until(() => FindPreviewButton("Согласиться · Tab") != null);
+                for (int i = 0; i < 3; i++) yield return null;
+                Assert.That(FindPreviewButton("Согласиться · Tab"), Is.Not.Null, "Held Tab must not also confirm the offer.");
+            }
+            finally
+            {
+                Object.Destroy(pump.gameObject);
+                InputSystem.RemoveDevice(keyboard);
+                InputSystem.settings.updateMode = update;
+                InputSystem.settings.backgroundBehavior = background;
+                InputSystem.settings.editorInputBehaviorInPlayMode = editorInput;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Stage7City_FireDamageExpiresAndClearsOnDisable()
+        {
+            var target = new GameObject("Fire test target");
+            target.SetActive(false);
+            var damage = target.AddComponent<DamageReceiver>();
+            damage.Configure(100, 0, .10f);
+            target.SetActive(true);
+            damage.ApplyDamage(new DamagePacket(-1, 4, DamageType.Fire));
+            Assert.That(damage.Health, Is.EqualTo(96));
+            yield return Until(() => damage.Health == 94);
+            target.SetActive(false);
+            target.SetActive(true);
+            yield return new WaitForSeconds(.7f);
+            Assert.That(damage.Health, Is.EqualTo(94));
+            damage.ApplyDamage(new DamagePacket(-1, 1, DamageType.Fire));
+            yield return Until(() => damage.Health == 87);
+            yield return new WaitForSeconds(.7f);
+            Assert.That(damage.Health, Is.EqualTo(87));
+            Object.Destroy(target);
+        }
+
+        [UnityTest]
+        public IEnumerator Stage7City_AllFifteenSegmentsKeepResourcesAndOnlyRoofCompletesTheRegion()
+        {
+            string directory = CityTestDirectory();
+            boot.Coordinator.SetStage5Runtime(new Stage5Runtime(directory));
+            var home = Object.FindFirstObjectByType<HomeScreen>();
+            home.FixedSeedInput.text = "5";
+            home.FullCityButton.onClick.Invoke();
+            var coordinator = boot.Coordinator;
+            yield return Until(() => coordinator.Phase == RunPhase.InArena, coordinator.Error);
+            string runId = coordinator.RunId;
+            int lastBalance = 0;
+            for (int segment = 0; segment < 15; segment++)
+            {
+                yield return Until(() => coordinator.Phase == RunPhase.InArena &&
+                    coordinator.CitySegmentIndex == segment, coordinator.Error);
+                var screen = Object.FindFirstObjectByType<StreetMapScreen>();
+                var body = screen.Player.GetComponent<Rigidbody2D>();
+                var progression = coordinator.Stage5.Session.Snapshot;
+                Assert.That(coordinator.RunId, Is.EqualTo(runId));
+                Assert.That(progression.Run.StageId, Is.EqualTo(CityRegionRoute.IdAt(segment)));
+                Assert.That(progression.Profile.CompletedRegionIds, Is.Empty);
+                Assert.That(progression.Profile.ConfirmedCrystals, Is.EqualTo(lastBalance));
+                var reachable = StreetMapCatalog.Reachable(.45f);
+                foreach (var room in StreetMapLayout.Rooms)
+                    Assert.That(reachable.Contains(Vector2Int.FloorToInt(room.Center)), Is.True, $"{segment}/{room.Id}");
+                if (segment == 0) Apply(screen.Player.GetComponent<DamageReceiver>(), 58);
+                else Assert.That(screen.Player.ReadSnapshot().Health, Is.EqualTo(72));
+                if (segment is 5 or 10)
+                {
+                    Park(body, StreetMapLayout.Entry + new Vector2(-3.4f, -1.3f));
+                    screen.TryExit();
+                    Assert.That(screen.Player.ReadSnapshot().MagazineCapacity, Is.EqualTo(segment == 5 ? 18 : 6));
+                }
+                if (segment > 5 && segment < 10)
+                    Assert.That(screen.Player.ReadSnapshot().MagazineCapacity, Is.EqualTo(18));
+                if (segment > 10) Assert.That(screen.Player.ReadSnapshot().MagazineCapacity, Is.EqualTo(6));
+
+                foreach (var room in coordinator.FullCityRoute.MapAt(segment).Rooms)
+                foreach (var point in room.Points)
+                    Assert.That(Physics2D.OverlapCircle(new Vector2(room.CenterX + point.X, room.CenterY + point.Y),
+                        point.ClearanceRadius, LayerMask.GetMask("World")), Is.Null, $"{segment}/{point.PointId}");
+                for (int room = 0; room < 3; room++)
+                    yield return ClearPreviewRoom(screen, body, room);
+                Park(body, StreetMapLayout.Rooms[4].Center);
+                bool bossRoom = CityRegionRoute.IsBoss(segment);
+                yield return Until(() => screen.Rooms[3].State.AliveCount == (bossRoom ? 1 : 3));
+                if (bossRoom) Assert.That(Object.FindFirstObjectByType<CityHeavyBoss>(), Is.Not.Null);
+                foreach (var enemy in Object.FindObjectsByType<EliteEnemy>(FindObjectsSortMode.None)) Kill(enemy);
+                yield return Until(() => screen.Portal.IsOpen);
+                lastBalance = coordinator.Stage5.Session.Snapshot.Profile.ConfirmedCrystals;
+                Park(body, screen.Portal.transform.position);
+                screen.TryExit();
+            }
+            yield return Until(() => coordinator.Phase == RunPhase.Home, coordinator.Error);
+            Assert.That(coordinator.LastOutcome, Is.EqualTo(RunOutcome.Victory));
+            coordinator.SetStage5Runtime(new Stage5Runtime(directory));
+            Assert.That(coordinator.Stage5.Session.Snapshot.Profile.CompletedRegionIds, Is.EqualTo(new[] { "city" }));
+            Assert.That(coordinator.Stage5.Session.Snapshot.Profile.ConfirmedCrystals, Is.EqualTo(lastBalance));
         }
 
         private IEnumerator StartCity(int seed)

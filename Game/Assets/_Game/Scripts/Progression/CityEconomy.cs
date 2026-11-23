@@ -17,6 +17,11 @@ namespace Game.Progression
 
         internal static IReadOnlyList<string> Stages { get; } =
             Array.AsReadOnly(new[] { "1-1", "1-2", "1-3", "1-4", "1-5" });
+        public static IReadOnlyList<string> FullRoute { get; } = Array.AsReadOnly(new[]
+        {
+            "1-1", "1-2", "1-3", "1-4", "1-5", "2-1", "2-2", "2-3", "2-4", "2-5",
+            "3-1", "3-2", "3-3", "3-4", "3-5"
+        });
 
         public static bool CanIdentifyDeath(string spawnId, string enemyTypeId) =>
             !string.IsNullOrWhiteSpace(spawnId) && (IsSummon(spawnId) || EnemyTypes.IsKnown(enemyTypeId) ||

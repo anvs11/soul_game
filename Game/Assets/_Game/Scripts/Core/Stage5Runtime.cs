@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using Game.Contracts;
 using Game.Progression;
+using System.Linq;
 using UnityEngine;
 
 namespace Game.Core
@@ -21,7 +22,12 @@ namespace Game.Core
         private CityProgressionSession session;
         private string startId;
         private int startSeed;
+        private bool startFullCity;
         private string purchaseId;
+        private string selectionId;
+        private string selectionWeapon;
+        private bool separateProfile;
+        private bool replayTutorial;
         public CityProgressionSession Session => session ??= Open(directory);
 
         public Stage5Runtime(string directory)
@@ -41,18 +47,24 @@ namespace Game.Core
 
         private static CityProgressionSession Open(string path) => new(() => Time.timeAsDouble, new JsonSaveRepository(path));
 
-        internal ProgressionResult Start(int seed, out string id)
+        internal ProgressionResult Start(int seed, bool fullCity, out string id)
         {
-            if (startId == null || startSeed != seed)
+            if (startId == null || startSeed != seed || startFullCity != fullCity)
             {
                 startId = Guid.NewGuid().ToString("N");
                 startSeed = seed;
+                startFullCity = fullCity;
             }
             id = startId;
-            var result = Session.StartRun(new ProgressionCommandKey(id, "start"), seed, Points);
+            var points = fullCity ? CityEconomy.FullRoute.SelectMany(segment => Points.Select(point =>
+                new ProgressionTransitionPoint(segment + "/" + point.RoadId, segment, point.RoadId, point.EntranceId, point.AllowedNpcs))).ToArray() : Points;
+            var result = Session.StartRun(new ProgressionCommandKey(id, "start"), seed, points, fullCity);
             if (result.Status != ProgressionStatus.RetryableFailure) startId = null;
             return result;
         }
+
+        internal ProgressionResult Enter(string id, string segment) =>
+            Session.EnterStage(new ProgressionCommandKey(id, "enter/" + segment), segment);
 
         internal ProgressionResult Finish(string id, RunOutcome outcome) =>
             Session.FinishRun(new ProgressionCommandKey(id, "finish"), outcome);
@@ -68,7 +80,37 @@ namespace Game.Core
         internal void OpenSeparateProfile()
         {
             session = Open(directory + "-separate");
-            startId = purchaseId = null;
+            separateProfile = true;
+            replayTutorial = false;
+            startId = purchaseId = selectionId = null;
+        }
+
+        internal ProgressionResult SelectStarter(string weaponId)
+        {
+            if (selectionId == null || selectionWeapon != weaponId)
+            {
+                selectionId = Guid.NewGuid().ToString("N");
+                selectionWeapon = weaponId;
+            }
+            var result = Session.SelectStarter(new ProgressionCommandKey(null, selectionId), weaponId);
+            if (result.Status != ProgressionStatus.RetryableFailure) selectionId = null;
+            return result;
+        }
+
+        private string TutorialMarker => Path.Combine(separateProfile ? directory + "-separate" : directory, "tutorial-seen");
+        internal bool HasSeenTutorial => !replayTutorial && File.Exists(TutorialMarker);
+        internal void ReplayTutorial() => replayTutorial = true;
+
+        internal void MarkTutorialSeen()
+        {
+            replayTutorial = false;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(TutorialMarker));
+                using var marker = File.Open(TutorialMarker, FileMode.OpenOrCreate);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         internal static string Describe(ProgressionFailure failure) => failure switch

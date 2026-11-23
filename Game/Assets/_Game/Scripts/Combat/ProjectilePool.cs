@@ -12,6 +12,7 @@ namespace Game.Combat
         private Transform container;
         public int ActiveCount => active.Count;
         public int TotalCount => pool?.CountAll ?? 0;
+        internal Projectile Template => prefab;
         public void Configure(Projectile template, int limit)
         {
             if (pool != null) throw new System.InvalidOperationException("Pool is already initialized.");

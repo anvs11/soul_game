@@ -21,15 +21,32 @@ namespace Game.Combat
         private bool controlsEnabled = true;
         private Vector2 aim = Vector2.down;
         private long attackId;
+        private int citySeed, cityShots;
+        private bool cityCritical, fireAmmo;
         public event Action Changed;
         public WeaponRuntimeState State => state ?? (state = new WeaponRuntimeState(definition));
         internal void EquipCityStarter()
         {
-            var starter = Resources.Load<WeaponDefinition>("Stage5CityPistol");
-            if (starter == null) throw new InvalidOperationException("The City starter weapon resource is missing.");
-            var replacement = new WeaponRuntimeState(starter);
-            definition = starter;
-            state = replacement;
+            EquipCityWeapon("Stage5CityPistol", false);
+        }
+        internal void EquipCityFamily(CityFirearm family)
+        {
+            EquipCityWeapon(family == CityFirearm.SubmachineGun ? "CitySubmachineGun" : "CityCarbine",
+                family == CityFirearm.Carbine);
+        }
+        private void EquipCityWeapon(string resource, bool fire)
+        {
+            var weapon = Resources.Load<WeaponDefinition>(resource);
+            if (weapon == null) throw new InvalidOperationException("Missing firearm resource: " + resource);
+            definition = weapon;
+            state = new WeaponRuntimeState(weapon);
+            fireAmmo = fire;
+            Changed?.Invoke();
+        }
+        internal void EnableCityCriticals(int seed)
+        {
+            cityCritical = true;
+            citySeed = seed;
         }
         public void Configure(WeaponDefinition settings, MonoBehaviour spawner)
         {
@@ -71,10 +88,13 @@ namespace Game.Combat
             else if (command.Move.sqrMagnitude > .0001f) aim = command.Move.normalized;
             if (permissions.CanAttack && command.AttackHeld && State.Selected)
             {
+                bool critical = cityCritical && Game.Progression.CityEconomy.Roll(citySeed,
+                    (cityShots + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), "critical", 8) == 0;
                 var request = new ProjectileSpawnRequest(transform.position, aim, definition.ProjectileSpeed,
                     definition.ProjectileLifetime, definition.ProjectileRadius, hitMask, identity.ActorId, identity.Faction,
-                    new DamagePacket(identity.ActorId, definition.Damage, attackId: ++attackId));
-                State.TryFire((IProjectileSpawner)projectileSpawner, in request);
+                    new DamagePacket(identity.ActorId, definition.Damage * (critical ? 1.5f : 1f),
+                        fireAmmo ? DamageType.Fire : DamageType.Normal, attackId: ++attackId));
+                if (State.TryFire((IProjectileSpawner)projectileSpawner, in request)) cityShots++;
             }
             else if (permissions.CanAttack && command.AttackHeld && State.IsMelee)
             {

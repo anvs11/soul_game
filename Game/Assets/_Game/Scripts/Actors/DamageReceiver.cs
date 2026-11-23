@@ -26,6 +26,7 @@ namespace Game.Actors
         public bool IsDead => State.IsDead;
         public bool CanReceiveHits => adjustment == null || adjustment.CanReceiveHits;
         public event Action<DamageResult> DamageApplied;
+        internal static event Action<DamageReceiver> Hit;
         private void Awake() => adjustment = GetComponent<IDamageAdjustment>();
         internal float TryHeal(float amount) => State.TryHeal(amount);
         internal float TryRepair(float amount) => State.TryRepair(amount);
@@ -56,7 +57,10 @@ namespace Game.Actors
             var result = State.ApplyDamage(in adjusted);
             if (!result.Applied) return result;
             protectedUntil = Time.timeAsDouble + (packet.ProtectionSecondsOverride ?? protectionSeconds);
+            if (packet.DamageType == DamageType.Fire && !result.Killed)
+                (GetComponent<CityBurn>() ?? gameObject.AddComponent<CityBurn>()).Ignite(packet.SourceActorId);
             DamageApplied?.Invoke(result);
+            Hit?.Invoke(this);
             return result;
         }
     }

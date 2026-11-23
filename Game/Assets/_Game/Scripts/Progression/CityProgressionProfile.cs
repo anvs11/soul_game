@@ -61,6 +61,22 @@ namespace Game.Progression
                 return CommitProfile(next);
             }, home: true);
 
+        public ProgressionResult SelectStarter(ProgressionCommandKey key, string weaponId) =>
+            Execute(key, nameof(SelectStarter), weaponId, () =>
+            {
+                var unavailable = EnsureWritableProfile();
+                if (unavailable.HasValue) return unavailable.Value;
+                if (run != null || profile.activeRun.Exists) return Reject(ProgressionFailure.WrongPhase);
+                if (weaponId != ProfileData.DefaultWeaponId &&
+                    (weaponId != homeOffer.UnlockId || !profile.unlockedIds.Contains(weaponId)))
+                    return Reject(ProgressionFailure.UnknownTarget);
+                if (profile.selectedWeaponId == weaponId) return Replayed;
+
+                var next = profile.Copy();
+                next.selectedWeaponId = weaponId;
+                return CommitProfile(next);
+            }, home: true);
+
         private CommandOutcome? EnsureWritableProfile()
         {
             if (saves != null && (profile == null && profileState != ProgressionProfileState.IncompatibleSchema))

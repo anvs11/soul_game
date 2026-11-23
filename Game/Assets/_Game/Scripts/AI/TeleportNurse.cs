@@ -71,6 +71,7 @@ namespace Game.AI
                     if (timer > 0 || ToHero.magnitude > 5.5f || !Visible(Body.position, HeroPosition)) break;
                     heading = ToHero.sqrMagnitude > .001f ? ToHero.normalized : Vector2.down;
                     phase = Phase.Aim;
+                    SignalWarning();
                     timer = .25f;
                     ShowMarker(marker, Body.position + heading * .7f, Vector2.one * .35f, Pink);
                     break;

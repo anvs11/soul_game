@@ -29,6 +29,12 @@ namespace Game.Editor
         public static void BuildStage5Windows() => BuildStreet(5, Stage4ScenePaths(), BuildTarget.StandaloneWindows64, "Windows", "ZombieExpedition.exe");
         [MenuItem("Game/Build/Stage 5 Android")]
         public static void BuildStage5Android() => BuildStreet(5, Stage4ScenePaths(), BuildTarget.Android, "Android", "ZombieExpedition.apk");
+        [MenuItem("Game/Build/Stage 6 Windows")]
+        public static void BuildStage6Windows() => BuildStreet(6, Stage4ScenePaths(), BuildTarget.StandaloneWindows64, "Windows", "ZombieExpedition.exe");
+        [MenuItem("Game/Build/Stage 6 Android")]
+        public static void BuildStage6Android() => BuildStreet(6, Stage4ScenePaths(), BuildTarget.Android, "Android", "ZombieExpedition.apk");
+        [MenuItem("Game/Build/Stage 7 Windows")]
+        public static void BuildStage7Windows() => BuildStreet(7, Stage4ScenePaths(), BuildTarget.StandaloneWindows64, "Windows", "ZombieExpedition.exe");
         [Serializable] private sealed class StreetBuildManifest
         {
             public string buildId, platform, result, editor, executable, buildGuid;

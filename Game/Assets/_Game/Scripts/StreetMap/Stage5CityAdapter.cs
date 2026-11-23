@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Game.Contracts;
+using Game.Combat;
 using Game.Core;
 using Game.Progression;
+using Game.UI;
 using UnityEngine;
 
 namespace Game.StreetMap
@@ -19,24 +21,43 @@ namespace Game.StreetMap
         private void ConnectCity()
         {
             city = run.Stage5.Session;
-            hero.BindProgressionWeaponIds(run.RunId + "/firearm", run.RunId + "/blade");
-            if (CitySnapshot.Run.StartingWeaponId == "pistol-city")
-                hero.GetComponent<Game.Combat.WeaponController>().EquipCityStarter();
+            BindFirearmIdentity();
+            var weapon = hero.GetComponent<WeaponController>();
+            if (run.CityWeapon != CityFirearm.Pistol) weapon.EquipCityFamily(run.CityWeapon);
+            else if (CitySnapshot.Run.StartingWeaponId == "pistol-city") weapon.EquipCityStarter();
+            if (run.CurrentRequest.IsFullCity)
+                weapon.EnableCityCriticals(unchecked(run.CurrentRequest.Seed + run.CitySegmentIndex * 1249));
+            if (run.PlayerTransfer.HasValue) hero.RestoreForEncounter(run.PlayerTransfer.Value);
             city.BindCombat(hero);
             foreach (var npc in CitySnapshot.Run.Npcs)
             {
-                if (npc.Point.PointId == Stage5Runtime.BrokerPoint)
+                if (npc.Point.StageId != run.CitySegmentId) continue;
+                if (npc.Kind == ProgressionNpcKind.WeaponDealer)
                     AddStop(PreviewNpc.Broker, npc.Point.PointId, BrokerRoad, new Vector2(112, -28), npc.PriceCoins);
-                if (npc.Point.PointId == Stage5Runtime.DealerPoint)
+                if (npc.Kind == ProgressionNpcKind.BottleDealer)
                     AddStop(PreviewNpc.Dealer, npc.Point.PointId, DealerRoad, new Vector2(136, -28), npc.PriceCoins);
             }
         }
 
+        private void BindFirearmIdentity()
+        {
+            string ranged = run.CityWeapon == CityFirearm.Pistol ? "/firearm" : "/firearm/" + run.CityWeapon;
+            hero.BindProgressionWeaponIds(run.RunId + ranged, run.RunId + "/blade");
+        }
+
+        internal void EquipCityFirearm(CityFirearm family)
+        {
+            run.CityWeapon = family;
+            BindFirearmIdentity();
+            hero.GetComponent<WeaponController>().EquipCityFamily(family);
+            city.BindCombat(hero);
+        }
+
         private ProgressionCommandKey Key(string id) => new(run.RunId, id);
-        private ProgressionCommandKey Attempt(string operation) => Key(operation + "/" + ++actionIndex);
+        private ProgressionCommandKey Attempt(string operation) => Key(run.CitySegmentId + "/" + operation + "/" + ++actionIndex);
 
         private ProgressionCheckpoint Checkpoint(string room) =>
-            new(Stage5Runtime.StageId, room, Array.FindIndex(screen.Rooms, candidate => candidate.RoomId == room));
+            new(run.CitySegmentId, room, run.CitySegmentIndex * 4 + Array.FindIndex(screen.Rooms, candidate => candidate.RoomId == room));
 
         private void ReadDeath(string room, string spawn, string type, out int ammo, out int coins, out int crystals,
             out string ammoId, out string coinId, out string crystalId)
@@ -66,7 +87,7 @@ namespace Game.StreetMap
 
         private int CollectAmmo(BodyLoot corpse)
         {
-            if (corpse.Ammo <= 0) return 0;
+            if (corpse.Ammo <= 0 || run.CityWeapon != CityFirearm.Pistol) return 0;
             if (city == null) return hero.TryAddReserve(corpse.Ammo);
             var result = city.CollectLoot(Attempt("ammo"), corpse.AmmoId);
             if (result.Failure != ProgressionFailure.None) return 0;
@@ -78,8 +99,9 @@ namespace Game.StreetMap
         {
             if (city == null) return kind == ProgressionSupplyKind.Armor ? hero.TryRepair(amount) : hero.TryHeal(amount);
             var before = hero.ReadSnapshot();
-            var result = city.CollectSupply(Attempt("supply"), id, kind, amount);
+            var result = city.CollectSupply(Attempt("supply"), run.CitySegmentId + "/" + id, kind, amount);
             if (result.Failure != ProgressionFailure.None) return 0;
+            screen.Feedback?.Play(CityCue.Pickup);
             var after = hero.ReadSnapshot();
             return kind == ProgressionSupplyKind.Armor ? after.Armor - before.Armor : after.Health - before.Health;
         }
@@ -90,7 +112,7 @@ namespace Game.StreetMap
             while (awaitingSave.Count > 0)
             {
                 var checkpoint = awaitingSave.Peek();
-                var result = city.ClearCheckpoint(Key("clear/" + checkpoint.RoomId), checkpoint);
+                var result = city.ClearCheckpoint(Key("clear/" + checkpoint.StageId + "/" + checkpoint.RoomId), checkpoint);
                 if (result.Failure != ProgressionFailure.None)
                 {
                     notice = Stage5Runtime.Describe(result.Failure);

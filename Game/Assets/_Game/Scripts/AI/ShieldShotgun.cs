@@ -36,6 +36,7 @@ namespace Game.AI
         {
             if (ToHero.sqrMagnitude > .001f) facing = ToHero.normalized;
             phase = Phase.Warning;
+            SignalWarning();
             timer = .6f;
             ramHit = false;
         }

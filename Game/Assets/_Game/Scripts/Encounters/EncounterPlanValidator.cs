@@ -27,6 +27,7 @@ namespace Game.Encounters
                 foreach (var candidate in map.Rooms) if (candidate.RoomId == roomPlan.RoomId) room = candidate;
                 if (room == null) return EncounterResult.Failure("UNKNOWN_ROOM: " + roomPlan.RoomId);
                 int count = 0, cost = 0, summons = 0;
+                bool boss = false;
                 var eliteTypes = new HashSet<string>(StringComparer.Ordinal);
                 if (roomPlan.Waves.Count > room.Budget.MaxWaves) return EncounterResult.Failure("WAVE_BUDGET: " + room.RoomId);
                 foreach (var wave in roomPlan.Waves)
@@ -46,7 +47,9 @@ namespace Game.Encounters
                             if(Overlap(point,EnemyTypes.Radius(spawn.EnemyTypeId),hero,.45f))return EncounterResult.Failure("HERO_OVERLAP: "+spawn.SpawnId);
                         for(int child=0;child<spawn.ReservedSummons;child++)
                             if(!spawnIds.Add(spawn.SummonId(child)))return EncounterResult.Failure("DUPLICATE_SUMMON: "+spawn.SpawnId);
-                        if (room.IsElite != EnemyTypes.IsElite(spawn.EnemyTypeId)) return EncounterResult.Failure("ROOM_ENEMY_KIND: " + room.RoomId);
+                        boss |= spawn.EnemyTypeId == EnemyTypes.HeavyBoss;
+                        if (room.IsElite != (EnemyTypes.IsElite(spawn.EnemyTypeId) || spawn.EnemyTypeId == EnemyTypes.HeavyBoss))
+                            return EncounterResult.Failure("ROOM_ENEMY_KIND: " + room.RoomId);
                         for (int previous = 0; previous < index; previous++)
                         {
                             var other = wave.Spawns[previous]; var otherPoint = FindPoint(room, other.PointId);
@@ -58,7 +61,9 @@ namespace Game.Encounters
                 }
                 if (count < room.Budget.MinEnemies || count > room.Budget.MaxEnemies || cost > room.Budget.MaxCost || summons > room.Budget.MaxSummons)
                     return EncounterResult.Failure("ROOM_BUDGET: " + room.RoomId);
-                if (room.IsElite && (count != 3 || eliteTypes.Count != 2)) return EncounterResult.Failure("ELITE_3_2: " + room.RoomId);
+                if (boss && count != 1) return EncounterResult.Failure("BOSS_COUNT: " + room.RoomId);
+                if (room.IsElite && !boss && (count != 3 || eliteTypes.Count != 2))
+                    return EncounterResult.Failure("ELITE_3_2: " + room.RoomId);
             }
             return EncounterResult.Success(plan, false, "VALID: finite encounter data; physics export still required");
         }

@@ -8,6 +8,7 @@ namespace Game.Actors
     {
         [SerializeField] private Game.Combat.CombatFaction faction = Game.Combat.CombatFaction.Player;
         public Game.Combat.CombatFaction Faction => faction;
+        internal void SetFaction(Game.Combat.CombatFaction value) => faction = value;
         private static int nextId;
         private int actorId;
         // Process-local identity, deliberately not serialized into duplicated prefabs.

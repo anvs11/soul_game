@@ -33,6 +33,8 @@ namespace Game.AI
         public abstract string EnemyTypeId { get; }
         public bool SpecialUsed { get; private set; }
         public event Action Died;
+        internal static event Action<EliteEnemy> WarningStarted;
+        protected void SignalWarning() => WarningStarted?.Invoke(this);
         protected virtual float Threshold => 0;
 
         public void Initialize(TargetRegistry targets, PlayerCombatFacade player)

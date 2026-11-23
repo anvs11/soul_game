@@ -26,13 +26,14 @@ namespace Game.Core
         public EncounterPlan FixedEncounter { get; }
         public bool IsStage5Preview { get; }
         public bool IsStage5City { get; }
+        public bool IsFullCity { get; }
         public bool IsStreetRun => ArenaId == ScenePaths.Stage3StreetSandbox;
         public bool IsFixedStreet1_1 => ArenaId == ScenePaths.Stage4StreetMap;
         public bool IsStage2Route { get; }
         public bool IsStage2Diagnostic => ArenaId == ScenePaths.Stage2CombatSandbox && !IsStage2Route;
 
         public RunRequest(string arenaId, int seed, bool isStage2Route = false, EncounterPlan fixedEncounter = null,
-            bool stage5Preview = false, bool stage5City = false)
+            bool stage5Preview = false, bool stage5City = false, bool fullCity = false)
         {
             ArenaId = arenaId;
             Seed = seed;
@@ -40,6 +41,7 @@ namespace Game.Core
             FixedEncounter = fixedEncounter;
             IsStage5Preview = stage5Preview;
             IsStage5City = stage5City;
+            IsFullCity = fullCity;
         }
 
         public static RunRequest StreetRun(int seed = 0) => new RunRequest(ScenePaths.Stage3StreetSandbox, seed);
@@ -51,8 +53,8 @@ namespace Game.Core
         public static RunRequest Stage5Preview(EncounterPlan plan) =>
             new RunRequest(ScenePaths.Stage4StreetMap, plan.Seed, fixedEncounter: plan, stage5Preview: true);
 
-        public static RunRequest Stage5City(EncounterPlan plan) =>
-            new RunRequest(ScenePaths.Stage4StreetMap, plan.Seed, fixedEncounter: plan, stage5City: true);
+        public static RunRequest Stage5City(EncounterPlan plan, bool fullCity = false) =>
+            new RunRequest(ScenePaths.Stage4StreetMap, plan.Seed, fixedEncounter: plan, stage5City: true, fullCity: fullCity);
 
         public static RunRequest Stage2(int seed = 0) => new RunRequest(ScenePaths.Stage2CombatSandbox, seed, true);
 

@@ -12,6 +12,8 @@ namespace Game.Combat
         private Vector2 position;
         private float remaining;
         private bool active;
+        private SpriteRenderer skin;
+        private Color originalColor;
         public void Launch(in ProjectileSpawnRequest value, Action<Projectile> release)
         {
             request = value; position = value.Position; remaining = value.Lifetime;
@@ -19,6 +21,9 @@ namespace Game.Combat
             transform.position = new Vector3(position.x, position.y, 0);
             transform.rotation = Quaternion.identity;
             transform.localScale = Vector3.one * (value.Radius * 2f);
+            if (skin == null && TryGetComponent(out skin)) originalColor = skin.color;
+            if (skin != null) skin.color = value.Damage.DamageType == DamageType.Fire
+                ? new Color(1f,.39f,.11f) : originalColor;
             gameObject.SetActive(true);
         }
         private void FixedUpdate()

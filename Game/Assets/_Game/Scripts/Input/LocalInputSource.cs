@@ -18,6 +18,7 @@ namespace Game.Input
         private PlayerCommand command;
         private bool focused = true;
         private bool suspended;
+        private bool tabHeld;
 
         private void OnEnable()
         {
@@ -55,9 +56,14 @@ namespace Game.Input
             if (sampledFrame == Time.frameCount) return command;
             sampledFrame = Time.frameCount;
             bool passage = npcEnabled && atNpcPassage?.Invoke() == true;
+            // Read the physical shortcut here as well as the configured action. UI focus
+            // and another bound device must not hide a keyboard press.
+            bool tabDown = Keyboard.current?.tabKey.isPressed == true;
+            bool tabPressed = tabDown && !tabHeld;
+            tabHeld = tabDown;
             bool openBackpack = npcEnabled && sampledFrame != inputResetFrame && backpack?.WasPressedThisFrame() == true;
             bool npcPressed = npcEnabled && !openBackpack && sampledFrame != inputResetFrame &&
-                (npc?.WasPressedThisFrame() == true || (passage && attack.WasPressedThisFrame()));
+                (tabPressed || npc?.WasPressedThisFrame() == true || (passage && attack.WasPressedThisFrame()));
             bool canAttack = !visitingNpc && !npcDialog && !npcPressed && !passage && !openBackpack;
             command = new PlayerCommand(npcDialog ? Vector2.zero : move.ReadValue<Vector2>(), canAttack && attack.IsPressed(),
                 !npcDialog && !npcPressed && !openBackpack && switchWeapon.WasPressedThisFrame(),
@@ -85,6 +91,7 @@ namespace Game.Input
             command = default;
             sampledFrame = -1;
             inputResetFrame = Time.frameCount;
+            tabHeld = Keyboard.current?.tabKey.isPressed == true;
             if (focused && !suspended && isActiveAndEnabled) map.Enable();
         }
 

@@ -89,6 +89,7 @@ namespace Game.AI
                 if (step + .001f < intended || grenade.Range < .001f)
                 {
                     grenade.Phase = 2;
+                    SignalWarning();
                     grenade.Timer = 1f;
                 }
                 return;

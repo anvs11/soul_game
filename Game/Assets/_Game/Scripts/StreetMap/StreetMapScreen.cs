@@ -36,6 +36,10 @@ namespace Game.StreetMap
         private readonly List<RoomPickup> pickups = new List<RoomPickup>();
         public bool IsCombatReady => combatAssets != null;
         private Stage5PreviewController preview;
+        private int boundCitySegment;
+        private bool exitDressed;
+        internal EncounterPlan ActiveEncounter => run.FullCityRoute?.PlanAt(run.CitySegmentIndex) ?? run.CurrentRequest.FixedEncounter;
+        internal CityFeedback Feedback { get; private set; }
         internal Vector2 MiniMapPosition => preview != null ? preview.MapPosition : (Vector2)player.transform.position;
         internal void ReleaseHeldControls() => controls.ClearHeld();
         protected override bool ShowView => false;
@@ -55,6 +59,7 @@ namespace Game.StreetMap
             if (!value.CurrentRequest.IsFixedStreet1_1 || player == null || registry == null || hud == null || enemies == null || enemies.Length != 6)
                 throw new InvalidOperationException("FixedStreet1_1 requires its hero, registry, HUD and six diagnostic melee enemies.");
             run = value;
+            boundCitySegment = value.CitySegmentIndex;
             cleared.Clear();
             Array.Clear(visited, 0, visited.Length);
             visited[0] = true;
@@ -81,7 +86,21 @@ namespace Game.StreetMap
                 preview = gameObject.AddComponent<Stage5PreviewController>();
                 preview.Initialize(this, value, controls);
                 if (value.CurrentRequest.IsStage5City)
+                {
+                    var art = new GameObject("City facades and street surface").AddComponent<CityStreetArt>();
+                    art.transform.SetParent(transform, false);
+                    if (value.CurrentRequest.IsFullCity && value.CitySegmentIndex >= 5)
+                    {
+                        art.Build(CityRegionRoute.DistrictAt(value.CitySegmentIndex), value.IsFinalCitySegment);
+                        CityDistrictDressing.Build(preview, value.FullCityRoute.MapAt(value.CitySegmentIndex), value.CitySegmentIndex);
+                    }
+                    else art.Build();
+                    Feedback = gameObject.AddComponent<CityFeedback>();
+                    Feedback.Bind(player);
                     foreach (var room in Rooms) room.CanBeginEncounter = () => !preview.HasPendingCheckpoint;
+                    if (!value.Stage5.HasSeenTutorial)
+                        gameObject.AddComponent<CityTutorial>().Initialize(this, value.Stage5, controls.SafeRoot);
+                }
             }
             if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = false;
             player.Died += OnPlayerDied;
@@ -90,7 +109,9 @@ namespace Game.StreetMap
             run.Changed += OnPhaseChanged;
             hud.Bind(player);
             string seed = value.CurrentRequest.FixedEncounter == null ? "Тестовый маршрут" : "Seed " + value.CurrentRequest.Seed;
-            hud.SetHint("1-1 · " + seed + " · WASD / Space / Q · Shift: кувырок · E: подбор / портал · Esc: пауза");
+            hud.SetHint(value.CurrentRequest.IsStage5City
+                ? run.CitySegmentId + " · " + seed + " · Shift: кувырок · Esc: пауза"
+                : "1-1 · " + seed + " · WASD / Space / Q · Shift: кувырок · E: подбор / портал · Esc: пауза");
             UpdateRoomLabel();
             OnPhaseChanged();
         }
@@ -118,9 +139,10 @@ namespace Game.StreetMap
         {
             if (Rooms != null) throw new InvalidOperationException("Load a fresh map for a new run.");
             bool seeded = run.CurrentRequest.FixedEncounter != null;
-            var map = seeded ? StreetMapCatalog.Create() : EncounterExample.CreateMap();
-            var plan = run.CurrentRequest.FixedEncounter ?? EncounterExample.CreateFixedPlan(run.CurrentRequest.Seed);
-            var validation = seeded ? EncounterPlanValidator.ValidateStage(map, plan) : EncounterPlanValidator.Validate(map,plan);
+            var map = run.FullCityRoute?.MapAt(run.CitySegmentIndex) ??
+                (seeded ? StreetMapCatalog.Create() : EncounterExample.CreateMap());
+            var plan = ActiveEncounter ?? EncounterExample.CreateFixedPlan(run.CurrentRequest.Seed);
+            var validation = seeded && run.FullCityRoute == null ? EncounterPlanValidator.ValidateStage(map, plan) : EncounterPlanValidator.Validate(map,plan);
             if (!validation.IsSuccess) throw new InvalidOperationException(validation.Diagnostic);
             var prefabs = seeded ? Resources.Load<FixedEncounterPrefabs>(FixedEncounterPrefabs.ResourceName) : null;
             if (seeded && (prefabs == null || !prefabs.IsComplete)) throw new InvalidOperationException("Missing encounter prefabs.");
@@ -173,7 +195,10 @@ namespace Game.StreetMap
                 foreach (var wave in plan4.Waves)
                 foreach (var spawn in wave.Spawns)
                 {
-                    var actor = combatAssets.CreateElite(spawn.EnemyTypeId, actorRoot.transform);
+                    var actor = spawn.EnemyTypeId == EnemyTypes.HeavyBoss
+                        ? CityHeavyBoss.Create(actorRoot.transform, sprite, player.GetComponent<ProjectilePool>().Template,
+                            CityRegionRoute.DistrictAt(run.CitySegmentIndex))
+                        : combatAssets.CreateElite(spawn.EnemyTypeId, actorRoot.transform);
                     actor.name = spawn.SpawnId;
                     actors.Add(actor);
                 }
@@ -198,6 +223,11 @@ namespace Game.StreetMap
                 {
                     if (marker.name == "Placeholder_NOT_AN_ENEMY" || marker.name == "EliteWarning_label")
                         marker.gameObject.SetActive(false);
+                    else if (run.CurrentRequest.IsStage5City && marker.TryGetComponent<TextMesh>(out _))
+                        marker.gameObject.SetActive(false);
+                    else if (run.CurrentRequest.IsStage5City && marker.name.StartsWith("Wall_", StringComparison.Ordinal) &&
+                        marker.TryGetComponent<SpriteRenderer>(out var wallRenderer))
+                        wallRenderer.forceRenderingOff = true;
                     else if (marker.name == "elite_label" && marker.TryGetComponent<TextMesh>(out var label))
                         label.text = "ELITE";
                 }
@@ -208,13 +238,19 @@ namespace Game.StreetMap
             foreach (var room in plan.Rooms) if (room.RoomId == id) return room;
             throw new InvalidOperationException("Missing room plan: " + id);
         }
-        private static MonoBehaviour[] CreateActors(RoomPlan room, FixedEncounterPrefabs prefabs, Transform parent)
+        private MonoBehaviour[] CreateActors(RoomPlan room, FixedEncounterPrefabs prefabs, Transform parent)
         {
             var actors = new List<MonoBehaviour>();
             foreach (var wave in room.Waves)
                 foreach (var spawn in wave.Spawns)
                 {
                     var actor = prefabs.InstantiateActor(spawn.EnemyTypeId, parent);
+                    if (run.FullCityRoute != null)
+                    {
+                        int district = CityRegionRoute.DistrictAt(run.CitySegmentIndex);
+                        if (actor is ShootingEnemy shooter) shooter.MarketVolley = district == 1;
+                        if (actor is JumpingEnemy jumper) jumper.FlankInBuilding = district == 2;
+                    }
                     actor.gameObject.SetActive(false);
                     actor.name = spawn.SpawnId;
                     actors.Add(actor);
@@ -240,7 +276,29 @@ namespace Game.StreetMap
                 }
             }
             RoomCleared?.Invoke(room.RunId,room.RoomId);
-            if(ClearedCount==4 && preview?.HasPendingCheckpoint != true)Portal.TryOpen(player);
+            if (ClearedCount == 4 && preview?.HasPendingCheckpoint != true && Portal.TryOpen(player))
+                DressCityExit();
+        }
+
+        private void DressCityExit()
+        {
+            if (exitDressed || run.FullCityRoute == null || run.CitySegmentIndex < 10) return;
+            exitDressed = true;
+            Vector2 location = Portal.transform.position;
+            if (run.IsFinalCitySegment)
+            {
+                var car = StreetMapLayout.Rooms[4].Center + new Vector2(5, -3);
+                preview.Tile("Машина эвакуации", car, new Vector2(2.5f, 1.15f), new Color(.32f,.43f,.45f), 1);
+                preview.Tile("Лобовое стекло", car + Vector2.right * .26f, new Vector2(.60f,.85f), new Color(.17f,.24f,.29f), 2);
+                Stage5PreviewController.WorldLabel(preview.transform, car + Vector2.up, "Эвакуация");
+                Stage5PreviewController.WorldLabel(preview.transform, StreetMapLayout.Rooms[4].Center + new Vector2(-5, -3), "Канализация · закрыто");
+                return;
+            }
+            for (int step = 0; step < 4; step++)
+                preview.Tile("Ступень", location + Vector2.up * (.2f * step - .3f), new Vector2(1.6f, .11f),
+                    new Color(.66f, .70f, .62f), 2);
+            string label = run.CitySegmentIndex == 13 ? "На крышу" : "На этаж выше";
+            Stage5PreviewController.WorldLabel(preview.transform, location + Vector2.up, label);
         }
         private void Drop(RoomController room, PickupKind kind, Vector2 position)
         {
@@ -270,6 +328,38 @@ namespace Game.StreetMap
         }
         private void UpdateRoomLabel()
         {
+            if (run.CurrentRequest.IsStage5City)
+            {
+                var label = CurrentRoomId switch
+                {
+                    "combat_a" => "Первый перекрёсток",
+                    "combat_b" => "Переулок",
+                    "combat_c" => "Двор",
+                    "elite" => "Финальный бой",
+                    _ => "Вход на улицу"
+                };
+                string cityText = $"{label}\nВстречи {ClearedCount}/4";
+                foreach (var room in Rooms)
+                {
+                    if (room.RoomId != CurrentRoomId) continue;
+                    cityText += room.State.Phase switch
+                    {
+                        RoomPhase.Cleared => " · Проходы открыты",
+                        RoomPhase.Fighting or RoomPhase.Waiting => $" · Врагов {room.State.AliveCount + room.State.PendingCount}",
+                        _ => ""
+                    };
+                    break;
+                }
+                if (ClearedCount == 4)
+                {
+                    string travel = !run.CurrentRequest.IsFullCity ? "Вернуться в убежище" : run.IsFinalCitySegment
+                        ? "Эвакуация с крыши" : "Дальше · " + CityRegionRoute.IdAt(run.CitySegmentIndex + 1);
+                    cityText += Portal != null && Portal.IsOpen ? $"\n{travel} · E рядом" : "\nНажмите E для размещения портала";
+                    if (!string.IsNullOrEmpty(run.Error)) cityText += "\n" + run.Error;
+                }
+                hud.SetEncounter(cityText);
+                return;
+            }
             string text="1-1 · "+CurrentRoomId+" · пройдено "+ClearedCount+"/4";
             if (CurrentRoomId == "elite" && combatAssets == null) text += "\nПроверочный бой";
             else if (combatAssets != null && preview == null && cleared.Contains(CurrentRoomId)) text += "\nE рядом с предметом: подобрать";
@@ -285,9 +375,12 @@ namespace Game.StreetMap
             if (preview?.RetryCheckpoint() == true) return;
             if ((preview != null && preview.TryUseInteract()) || TryPickup() || ClearedCount != 4) return;
             if(!Portal.TryOpen(player)){UpdateRoomLabel();return;}
+            DressCityExit();
             UpdateRoomLabel();
             if(Vector2.Distance(player.transform.position,Portal.transform.position)>1.5f)return;
-            run.FinishRun(RunOutcome.Victory);
+            if (run.CurrentRequest.IsFullCity && !run.IsFinalCitySegment)
+                run.AdvanceCity(player.ReadSnapshot, preview.CarriedMedkits);
+            else run.FinishRun(RunOutcome.Victory);
         }
         private void CancelRooms()
         { if (Rooms!=null) foreach (var room in Rooms) if (room!=null) room.Cancel(); }
@@ -323,8 +416,14 @@ namespace Game.StreetMap
             }
             bool active = run != null && run.Phase == RunPhase.InArena && !player.IsDead;
             player.SetControlsEnabled(active);
-            if (active) return;
-            if (run.Phase == RunPhase.ReturningHome && run.LastOutcome.HasValue) preview?.Finish();
+            if (active)
+            {
+                if (!string.IsNullOrEmpty(run.Error)) UpdateRoomLabel();
+                return;
+            }
+            if (run.Phase == RunPhase.ReturningHome && run.LastOutcome.HasValue ||
+                run.Phase == RunPhase.LoadingArena && run.CurrentRequest.IsFullCity && run.CitySegmentIndex != boundCitySegment)
+                preview?.Finish();
             if (run.Phase != RunPhase.LoadingArena) CancelRooms();
             controls?.ClearHeld(); IsPaused = false; Time.timeScale = 1;
             foreach (var enemy in enemies) if (enemy != null) enemy.gameObject.SetActive(false);

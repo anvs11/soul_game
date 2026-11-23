@@ -63,6 +63,7 @@ namespace Game.StreetMap
         private Stage5PreviewSession session;
         private Stage5PreviewView view;
         private Stage5Supplies supplies;
+        private CityArmory armory;
         private BattleControls battleControls;
         private BoundedFollowCamera cameraFollow;
         private Rigidbody2D body;
@@ -90,7 +91,9 @@ namespace Game.StreetMap
             sprite = hero.GetComponent<SpriteRenderer>().sprite;
             foreach (var candidate in FindObjectsByType<BoundedFollowCamera>(FindObjectsSortMode.None))
                 if (candidate.gameObject.scene == gameObject.scene) cameraFollow = candidate;
-            supplies = new Stage5Supplies(this, session, hero, Near, PlanCorpseArmor(run.CurrentRequest.FixedEncounter), ApplySupply);
+            supplies = new Stage5Supplies(this, session, hero, Near, PlanCorpseArmor(screen.ActiveEncounter), ApplySupply,
+                CityRegionRoute.DistrictAt(run.CitySegmentIndex));
+            if (run.CurrentRequest.IsFullCity) supplies.RestoreMedkits(run.CityMedkits);
             view = new Stage5PreviewView(controls.SafeRoot, Accept, Decline, ToggleBackpack, ApplyMedkit, StoreMedkit,
                 CloseSupplies, run.RetryStage5Finish);
             input?.SetNpcContext(true, false, false);
@@ -98,7 +101,11 @@ namespace Game.StreetMap
             hero.NpcRequested += TryVisit;
             hero.BackpackRequested += ToggleBackpack;
 
-            if (run.CurrentRequest.IsStage5City) ConnectCity();
+            if (run.CurrentRequest.IsStage5City)
+            {
+                ConnectCity();
+                if (run.CurrentRequest.IsFullCity) armory = new CityArmory(this, screen, run);
+            }
             else
             {
                 int layout = (int)((uint)run.CurrentRequest.Seed % 4);
@@ -149,8 +156,17 @@ namespace Game.StreetMap
             stops.Add(stop);
             bool vertical = kind == PreviewNpc.Broker;
             Vector2 threshold = road - (vertical ? Vector2.right : Vector2.up) * .57f;
-            Tile("Вход " + stop.Name, threshold, vertical ? new Vector2(.20f, 1.45f) : new Vector2(1.45f, .20f),
-                new Color(.87f, .86f, .74f), 3);
+            if (vertical)
+            {
+                var mouth = threshold - Vector2.right * .58f;
+                Tile("Проход между домами", mouth, new Vector2(1.35f, 1.9f), new Color(.08f, .105f, .11f), 1);
+                Outline("Вход " + stop.Name, threshold, new Vector2(.32f, 1.55f));
+            }
+            else
+            {
+                Tile("Дверь Диллера", threshold - Vector2.up * .28f, new Vector2(1.42f, .73f), new Color(.30f, .21f, .15f), 1);
+                Outline("Вход " + stop.Name, threshold - Vector2.up * .21f, new Vector2(1.44f, .54f));
+            }
             var floor = kind == PreviewNpc.Broker ? new Color(.14f, .16f, .18f) : new Color(.19f, .15f, .13f);
             Tile(stop.Name + " · пол", interior, new Vector2(12, 10), floor, -3);
             Wall(interior + new Vector2(-6, 0), new Vector2(.5f, 10));
@@ -277,6 +293,7 @@ namespace Game.StreetMap
                     if (!CollectCurrency(item.PickupId)) continue;
                 }
                 else session.Collect(item.Kind, item.Amount);
+                screen.Feedback?.Play(CityCue.Pickup);
                 RemoveLoot(i);
             }
         }
@@ -321,6 +338,11 @@ namespace Game.StreetMap
                 return true;
             }
             if (AtPassage()) { TryVisit(); return true; }
+            if (armory != null && armory.Use(body.position, out var response))
+            {
+                notice = response;
+                return true;
+            }
             var corpse = NearbyBody();
             if (supplies.Search(body.position, DistanceToBodySquared(corpse)))
             {
@@ -330,11 +352,19 @@ namespace Game.StreetMap
             }
             if (corpse == null) return false;
             int ammo = CollectAmmo(corpse);
-            float armor = corpse.Armor > 0 ? ApplySupply(corpse.ArmorId, ProgressionSupplyKind.Armor, (int)corpse.Armor) : 0;
+            bool foundArmor = corpse.Armor > 0;
+            if (foundArmor)
+            {
+                Vector2 center = corpse.Body.transform.position;
+                Vector2 towardHero = body.position - center;
+                Vector2 drop = center + towardHero.normalized * .42f;
+                supplies.DropArmor(corpse.ArmorId, Near(drop, 1.25f) ? drop : center, corpse.Armor);
+                corpse.Armor = 0;
+            }
             corpse.Ammo -= ammo;
-            if (armor > 0) corpse.Armor = 0;
-            notice = armor > 0 ? "Броня восстановлена" : ammo > 0 ? $"Патроны +{ammo}" :
-                corpse.Armor > 0 ? "Броня полная" : "Резерв патронов полон";
+            if (ammo > 0) screen.Feedback?.Play(CityCue.Pickup);
+            notice = foundArmor ? "Найдена броня" : ammo > 0 ? $"Патроны +{ammo}" :
+                run.CityWeapon != Game.Combat.CityFirearm.Pistol ? "В теле патроны 9 мм" : "Резерв патронов полон";
             if (corpse.Ammo == 0 && corpse.Armor <= 0)
             {
                 bodies.Remove(corpse);
@@ -512,7 +542,7 @@ namespace Game.StreetMap
             var corpse = CanInteract && inside == null && stop == null ? NearbyBody() : null;
             if (corpse == null && notice == "Резерв патронов полон") notice = null;
             if (inside == null && stop == null && CanInteract)
-                hint = supplies.Prompt(body.position, DistanceToBodySquared(corpse)) ?? corpse?.Prompt ?? "";
+                hint = armory?.Prompt(body.position) ?? supplies.Prompt(body.position, DistanceToBodySquared(corpse)) ?? corpse?.Prompt ?? "";
             if (inside == null && stop != null) hint = "Space / Tab / E · Пройти";
             if (inside != null)
             {
@@ -546,6 +576,8 @@ namespace Game.StreetMap
                     ? $"Улучшить оружие за {inside.Price} монет?" : $"Купить пузырёк за {inside.Price} монет?") : null,
                 run.Stage5FinishBlocked ? run.Error : HasPendingCheckpoint ? notice + " · E: повторить" : notice);
         }
+
+        internal int CarriedMedkits => supplies.BackpackMedkits;
 
         internal void Finish()
         {

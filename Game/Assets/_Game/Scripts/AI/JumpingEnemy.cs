@@ -74,6 +74,7 @@ namespace Game.AI
                 if(!Physics2D.GetIgnoreCollision(a,b)){Physics2D.IgnoreCollision(a,b,true);pairs.Add((a,b));}
         }
         private void RestoreContacts(){foreach(var p in pairs)if(p.a!=null&&p.b!=null)Physics2D.IgnoreCollision(p.a,p.b,false);pairs.Clear();}
+        internal bool FlankInBuilding { get; set; }
         private void ShowSignal(bool show)
         {
             if(show && signal==null && skin!=null && skin.sprite!=null)
@@ -102,7 +103,13 @@ namespace Game.AI
                     DashDirection=offset.sqrMagnitude>.0001f?offset.normalized:Vector2.down;
                     Phase=AttackPhase.Windup;timer=definition.Windup;consumed=false;ShowSignal(true);
                 }
-                else body.linearVelocity=offset.normalized*Mathf.Min(definition.ChaseSpeed,offset.magnitude/Time.fixedDeltaTime);
+                else
+                {
+                    Vector2 heading = offset.normalized;
+                    if (FlankInBuilding && offset.magnitude < definition.TriggerRange + 2f)
+                        heading = (heading + Vector2.Perpendicular(heading) * .65f).normalized;
+                    body.linearVelocity = heading * Mathf.Min(definition.ChaseSpeed,offset.magnitude/Time.fixedDeltaTime);
+                }
                 return;
             }
             if(Phase==AttackPhase.Dash){DashStep();return;}

@@ -34,6 +34,10 @@ namespace Game.StreetMap
         public bool Open => selected != null || backpackOpen;
         public string Notice { get; private set; }
         public int BackpackMedkits => medkits.Count;
+        internal void RestoreMedkits(int count)
+        {
+            for (int index = 0; index < count; index++) medkits.Push("carried/" + index);
+        }
         public bool FoundMedkit => selected != null;
         public bool CanHeal
         {
@@ -46,7 +50,7 @@ namespace Game.StreetMap
 
         public Stage5Supplies(Stage5PreviewController map, Stage5PreviewSession session,
             PlayerCombatFacade hero, Func<Vector2, float, bool> near, string corpseWithArmor,
-            Func<string, ProgressionSupplyKind, int, float> apply)
+            Func<string, ProgressionSupplyKind, int, float> apply, int district)
         {
             this.map = map;
             this.hero = hero;
@@ -64,12 +68,15 @@ namespace Game.StreetMap
                 float y = session.Roll(key + "/height", 2) == 0 ? -3.4f : 3.4f;
                 var position = room.Center + new Vector2(side * (room.Bounds.width / 2f - 1.7f), y);
                 var size = new Vector2(1.45f, 2.8f);
-                var paint = new Color(.23f, .28f, .26f);
-                var car = map.Tile("Сгоревшая машина", position, size, paint, 1);
-                AddObstacle(car);
-                map.Tile("Лобовое стекло", position + Vector2.up * .63f, new Vector2(1.15f, .44f), new Color(.09f, .12f, .12f), 2);
+                var paint = district == 0 ? new Color(.23f, .28f, .26f) : new Color(.38f, .34f, .27f);
+                string containerName = district == 0 ? "Сгоревшая машина" : district == 1 ? "Контейнер склада" : "Шкаф снабжения";
+                var container = map.Tile(containerName, position, size, paint, 1);
+                AddObstacle(container);
+                map.Tile(district == 0 ? "Лобовое стекло" : "Панель", position + Vector2.up * .63f,
+                    new Vector2(1.15f, .44f), new Color(.09f, .12f, .12f), 2);
                 var door = position - Vector2.right * side * .59f;
-                map.Tile("Дверь машины", door, new Vector2(.2f, .66f), new Color(.37f, .42f, .39f), 2);
+                map.Tile(district == 0 ? "Дверь машины" : "Ручка", door,
+                    new Vector2(.2f, .66f), new Color(.37f, .42f, .39f), 2);
                 bool medkit = medkitBudget > 0 && session.Roll(key + "/medkit", 100) < 35;
                 if (medkit) medkitBudget--;
                 var cache = new Cache
@@ -77,13 +84,14 @@ namespace Game.StreetMap
                     Approach = position - Vector2.right * side * 1.14f,
                     Id = key,
                     ArmorDropOffset = -Vector2.right * side * .64f,
-                    Prompt = "E · Обыскать машину",
+                    Prompt = district == 0 ? "E · Обыскать машину" : "E · Обыскать запас",
                     Medkit = medkit,
                     Concealed = true,
                     Armor = TakeArmor(session, key, ref armorBudget)
                 };
                 if (cache.HasLoot)
-                    cache.Highlight = map.Outline("Подсветка двери машины", door, new Vector2(.22f, .72f));
+                    cache.Highlight = map.Outline(district == 0 ? "Подсветка двери машины" : "Подсветка запаса",
+                        door, new Vector2(.22f, .72f));
                 caches.Add(cache);
             }
 
@@ -153,25 +161,22 @@ namespace Game.StreetMap
 
         public string Prompt(Vector2 position, float maxDistanceSquared) => Nearby(position, maxDistanceSquared)?.Prompt;
 
+        internal void DropArmor(string id, Vector2 location, float amount)
+        {
+            var size = new Vector2(.45f, .31f);
+            var plate = map.Tile("Броня на земле", location, size, new Color(.35f, .52f, .65f), 2);
+            map.Outline("Контур брони на земле", location, size).transform.SetParent(plate.transform, true);
+            caches.Add(new Cache { Approach = location, Id = id, Prompt = "E · Подобрать броню",
+                Armor = amount, Highlight = plate });
+        }
+
         public bool Search(Vector2 position, float maxDistanceSquared)
         {
             var cache = Nearby(position, maxDistanceSquared);
             if (cache == null) return false;
             if (cache.Concealed && cache.Armor > 0)
             {
-                var location = cache.Approach + cache.ArmorDropOffset;
-                var size = new Vector2(.45f, .31f);
-                var plate = map.Tile("Броня на земле", location, size, new Color(.35f, .52f, .65f), 2);
-                var highlight = map.Outline("Контур брони на земле", location, size);
-                highlight.transform.SetParent(plate.transform, true);
-                caches.Add(new Cache
-                {
-                    Approach = location,
-                    Id = cache.Id,
-                    Prompt = "E · Подобрать броню",
-                    Armor = cache.Armor,
-                    Highlight = plate
-                });
+                DropArmor(cache.Id, cache.Approach + cache.ArmorDropOffset, cache.Armor);
                 cache.Armor = 0;
                 SyncHighlight(cache);
                 Notice = "Найдена броня";

@@ -2,6 +2,8 @@ using System;
 using Game.Contracts;
 using Game.Street;
 using Game.Generation;
+using Game.StreetMap;
+using Game.Combat;
 
 namespace Game.Core
 {
@@ -18,6 +20,12 @@ namespace Game.Core
         public GenerationResult StreetGeneration { get; private set; }
         public string ActiveArena { get; private set; }
         public CombatSnapshot? PlayerTransfer { get; private set; }
+        public CityRegionRoute FullCityRoute { get; private set; }
+        public int CitySegmentIndex { get; private set; }
+        public string CitySegmentId => CityRegionRoute.IdAt(CitySegmentIndex);
+        public bool IsFinalCitySegment => CitySegmentIndex == CityRegionRoute.SegmentCount - 1;
+        public int CityMedkits { get; private set; }
+        public CityFirearm CityWeapon { get; internal set; }
 
         public RunPhase Phase { get; private set; } = RunPhase.Booting;
         public string RunId { get; private set; }
@@ -72,10 +80,12 @@ namespace Game.Core
             if (request.IsStage2Route && request.ArenaId != ScenePaths.Stage2CombatSandbox)
                 throw new ArgumentException("Stage 2 route must start in its ordinary arena.", nameof(request));
             string id = null;
+            CityRegionRoute cityRoute = null;
             if (request.IsStage5City)
             {
                 if (Stage5 == null || request.FixedEncounter == null) throw new InvalidOperationException("City requires a profile and encounter plan.");
-                var result = Stage5.Start(request.Seed, out id);
+                if (request.IsFullCity) cityRoute = new CityRegionRoute(request.FixedEncounter);
+                var result = Stage5.Start(request.Seed, request.IsFullCity, out id);
                 if (result.Failure != ProgressionFailure.None)
                 {
                     Error = Stage5Runtime.Describe(result.Failure);
@@ -87,6 +97,9 @@ namespace Game.Core
             StreetGeneration = request.IsStreetRun ? requestedGeneration : null;
             SegmentIndex = request.IsStreetRun ? 1 : 0;
             CurrentRequest = request;
+            FullCityRoute = cityRoute;
+            CitySegmentIndex = CityMedkits = 0;
+            CityWeapon = CityFirearm.Pistol;
             ActiveArena = request.ArenaId;
             PlayerTransfer = null;
             pendingAdvance = null;
@@ -116,6 +129,13 @@ namespace Game.Core
             if (pendingAdvance == null) pendingAdvance = readState;
         }
 
+        internal void AdvanceCity(Func<CombatSnapshot> readState, int medkits)
+        {
+            if (Phase != RunPhase.InArena || FullCityRoute == null || IsFinalCitySegment || pendingAdvance != null) return;
+            CityMedkits = medkits;
+            pendingAdvance = readState;
+        }
+
         // The Unity owner calls this once in LateUpdate, after gameplay requests.
         public void ResolvePendingFinish()
         {
@@ -137,6 +157,20 @@ namespace Game.Core
                 {
                     FinishRun(RunOutcome.Defeat);
                     ResolvePendingFinish();
+                    return;
+                }
+                if (CurrentRequest.IsFullCity)
+                {
+                    var entered = Stage5.Enter(RunId, CityRegionRoute.IdAt(CitySegmentIndex + 1));
+                    if (entered.Failure != ProgressionFailure.None)
+                    {
+                        Error = Stage5Runtime.Describe(entered.Failure);
+                        Changed?.Invoke();
+                        return;
+                    }
+                    CitySegmentIndex++;
+                    PlayerTransfer = state;
+                    Load(ScenePaths.Stage4StreetMap, RunPhase.LoadingArena, RunPhase.InArena);
                     return;
                 }
                 PlayerTransfer = state;

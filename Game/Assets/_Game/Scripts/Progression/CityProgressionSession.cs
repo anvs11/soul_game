@@ -51,10 +51,13 @@ namespace Game.Progression
         }
 
         public ProgressionResult StartRun(ProgressionCommandKey key, int seed,
-            IReadOnlyList<ProgressionTransitionPoint> transitionPoints)
+            IReadOnlyList<ProgressionTransitionPoint> transitionPoints) => StartRun(key, seed, transitionPoints, false);
+
+        internal ProgressionResult StartRun(ProgressionCommandKey key, int seed,
+            IReadOnlyList<ProgressionTransitionPoint> transitionPoints, bool fullCity)
         {
             var start = new StartRequest(seed,
-                transitionPoints?.OrderBy(point => point.PointId, StringComparer.Ordinal).ToArray());
+                transitionPoints?.OrderBy(point => point.PointId, StringComparer.Ordinal).ToArray(), fullCity);
             return Execute(key, nameof(StartRun), start, () =>
             {
                 var unavailable = EnsureWritableProfile();
@@ -62,7 +65,7 @@ namespace Game.Progression
                 if (run != null || profile.activeRun.Exists || profile.finishedRuns.Any(entry => entry.runId == key.RunId))
                     return Reject(ProgressionFailure.WrongPhase);
                 if (!ValidPoints(start.Points)) return Reject(ProgressionFailure.InvalidRequest);
-                var nextRun = new RunState(key.RunId, seed, CityEconomy.PlanNpcs(seed, start.Points), profile.selectedWeaponId);
+                var nextRun = new RunState(key.RunId, seed, CityEconomy.PlanNpcs(seed, start.Points), profile.selectedWeaponId, fullCity);
                 var next = profile.Copy();
                 next.activeRun = new ActiveRunData { runId = key.RunId, seed = seed, stageId = nextRun.StageId };
                 var written = CommitProfile(next);
@@ -76,7 +79,7 @@ namespace Game.Progression
             Active(key, nameof(EnterStage), stageId, () =>
             {
                 int next = run.Stage + 1;
-                if (next >= CityEconomy.Stages.Count || CityEconomy.Stages[next] != stageId ||
+                if (next >= run.Route.Count || run.Route[next] != stageId ||
                     run.Rooms.Values.Any(room => !room.Cleared))
                     return Reject(ProgressionFailure.WrongPhase);
                 var unavailable = EnsureWritableProfile();
@@ -109,7 +112,7 @@ namespace Game.Progression
                 if (run?.Id != key.RunId || profile.activeRun.runId != key.RunId)
                     return Reject(ProgressionFailure.WrongPhase);
                 var committed = CommitProfile(EndProfileRun(run.Id, outcome,
-                    outcome == RunOutcome.Victory && run.Stage == CityEconomy.Stages.Count - 1));
+                    outcome == RunOutcome.Victory && run.Stage == run.Route.Count - 1));
                 if (committed.Status != ProgressionStatus.Applied) return committed;
                 FinishLocally(outcome);
                 return Applied;
@@ -283,7 +286,7 @@ namespace Game.Progression
             var pointIds = new HashSet<string>(StringComparer.Ordinal);
             var entrances = new HashSet<(string Stage, string Road, string Entrance)>();
             const ProgressionNpcKind all = ProgressionNpcKind.WeaponDealer | ProgressionNpcKind.BottleDealer;
-            return points.All(point => Id(point.PointId) && CityEconomy.Stages.Contains(point.StageId) &&
+            return points.All(point => Id(point.PointId) && CityEconomy.FullRoute.Contains(point.StageId) &&
                 Id(point.RoadId) && Id(point.EntranceId) && (point.AllowedNpcs & ~all) == 0 &&
                 pointIds.Add(point.PointId) && entrances.Add((point.StageId, point.RoadId, point.EntranceId)));
         }
@@ -306,7 +309,8 @@ namespace Game.Progression
             public string Id { get; }
             public int Seed { get; }
             public int Stage;
-            public string StageId => CityEconomy.Stages[Stage];
+            public IReadOnlyList<string> Route { get; }
+            public string StageId => Route[Stage];
             public int Coins;
             public string StartingWeaponId { get; }
             public readonly List<ProgressionEffectSnapshot> BottleEffects = new();
@@ -319,8 +323,9 @@ namespace Game.Progression
             public readonly HashSet<string> UsedSupplies = new(StringComparer.Ordinal);
             public readonly Dictionary<string, ProgressionModuleKind> Modules = new(StringComparer.Ordinal);
 
-            public RunState(string id, int seed, List<ProgressionNpcSnapshot> npcs, string startingWeaponId)
+            public RunState(string id, int seed, List<ProgressionNpcSnapshot> npcs, string startingWeaponId, bool fullCity)
             {
+                Route = fullCity ? CityEconomy.FullRoute : CityEconomy.Stages;
                 Id = id;
                 Seed = seed;
                 Npcs = npcs;

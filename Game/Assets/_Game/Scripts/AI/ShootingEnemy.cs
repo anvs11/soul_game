@@ -53,6 +53,7 @@ namespace Game.AI
         private void Register(){if(registry!=null&&isActiveAndEnabled&&!IsDead)registry.Register(this);}
         private void Detach(){if(registry!=null){registry.Reactivated-=Register;registry.Unregister(this);}}
         private void ClearShots(){if(pool!=null)pool.ClearActive();}
+        internal bool MarketVolley { get; set; }
         private void ResetAttack(){remaining=0;Phase=IsDead?AttackPhase.Dead:AttackPhase.Waiting;body.linearVelocity=Vector2.zero;perception.ResetMemory();if(skin!=null)skin.color=Color.cyan;}
         private void OnDisable(){Detach();ClearShots();if(health!=null)health.DamageApplied-=OnDamage;if(body!=null)ResetAttack();}
         private void FixedUpdate()
@@ -82,11 +83,18 @@ namespace Game.AI
             }
             remaining-=Time.fixedDeltaTime;
             if(remaining>0)return;
-            var request=new ProjectileSpawnRequest(body.position,offset.normalized,definition.ProjectileSpeed,
-                definition.ProjectileLifetime,.12f,damageMask,ActorId,identity.Faction,new DamagePacket(ActorId,definition.Damage));
-            if(pool.TrySpawn(in request))ShotsFired++;
+            if (MarketVolley) { Fire(offset, -14); Fire(offset, 14); }
+            else Fire(offset, 0);
             Phase=AttackPhase.Recovery;remaining=definition.Interval;
             if(skin!=null)skin.color=Color.cyan;
+        }
+        private void Fire(Vector2 offset, float angle)
+        {
+            Vector2 direction = Quaternion.Euler(0, 0, angle) * offset.normalized;
+            var request = new ProjectileSpawnRequest(body.position, direction, definition.ProjectileSpeed,
+                definition.ProjectileLifetime, .12f, damageMask, ActorId, identity.Faction,
+                new DamagePacket(ActorId, definition.Damage));
+            if (pool.TrySpawn(in request)) ShotsFired++;
         }
         private void OnDamage(DamageResult result){if(result.Killed)Die();}
         private void Die()

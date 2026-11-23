@@ -35,7 +35,7 @@ namespace Game.Progression
                 checkpoints == null || finishedRuns == null || homePurchases == null)
                 return false;
 
-            if (activeRun.Exists && (!IsId(activeRun.runId) || !CityEconomy.Stages.Contains(activeRun.stageId)))
+            if (activeRun.Exists && (!IsId(activeRun.runId) || !CityEconomy.FullRoute.Contains(activeRun.stageId)))
                 return false;
             var runIds = new HashSet<string>(StringComparer.Ordinal);
             if (activeRun.Exists) runIds.Add(activeRun.runId);
@@ -47,7 +47,7 @@ namespace Game.Progression
             var rooms = new HashSet<(string, string, string)>();
             foreach (var entry in checkpoints)
                 if (!IsId(entry.runId) || !runIds.Contains(entry.runId) || entry.checkpointIndex < 0 ||
-                    !CityEconomy.Stages.Contains(entry.stageId) || !IsId(entry.roomId) || entry.crystals < 0 ||
+                    !CityEconomy.FullRoute.Contains(entry.stageId) || !IsId(entry.roomId) || entry.crystals < 0 ||
                     !checkpointKeys.Add((entry.runId, entry.checkpointIndex)) ||
                     !rooms.Add((entry.runId, entry.stageId, entry.roomId)))
                     return false;
