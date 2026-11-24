@@ -1232,10 +1232,12 @@ namespace Game.Tests
             CreateTestWall(new Vector2(1.2f, 0));
             Apply(hp, 80);
             yield return Until(() => nurse.IsSlime);
-            yield return new WaitForSeconds(5f);
+            float chaseStarted = Time.fixedTime;
+            yield return new WaitForSeconds(1f);
             Assert.That(nurse.IsSlime, Is.True);
             Assert.That(body.position.x, Is.GreaterThan(1.5f));
             yield return Until(() => !nurse.IsSlime);
+            Assert.That(Time.fixedTime - chaseStarted, Is.EqualTo(2.7f).Within(.10f));
             Assert.That(registry.Count, Is.EqualTo(1));
             Assert.That(statuses.Contains(nurse.ActorId, "mist_stun"), Is.False);
         }

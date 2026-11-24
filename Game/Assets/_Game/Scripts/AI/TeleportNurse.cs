@@ -30,7 +30,7 @@ namespace Game.AI
         {
             marker.enabled = false;
             phase = Phase.Slime;
-            timer = 6f;
+            timer = 2.7f;
             SetTargetable(false);
             Skin.color = new Color(.95f, .4f, .85f, .45f);
         }
