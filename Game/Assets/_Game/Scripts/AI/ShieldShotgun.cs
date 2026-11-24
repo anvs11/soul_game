@@ -85,7 +85,9 @@ namespace Game.AI
                 facing = Rotate(facing, Mathf.Clamp(turn, -65f * dt, 65f * dt));
             }
             float distance = ToHero.magnitude;
-            if (distance > 2.6f && Vector2.Dot(facing, ToHero) > 0)
+            if (phase == Phase.Patrol && CoverBlocksHero)
+                Pursue(1.5f * dt, dt);
+            else if (distance > 2.6f && Vector2.Dot(facing, ToHero) > 0)
                 Travel(facing, (phase == Phase.Burst ? 3.2f : 1.5f) * dt, dt);
             cooldown -= dt;
             if (cooldown > 0 || distance > 5f || Vector2.Dot(facing, ToHero) <= 0 || !Visible(Body.position, HeroPosition)) return;

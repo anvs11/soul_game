@@ -35,6 +35,25 @@ namespace Game.Core
             this.directory = Path.GetFullPath(directory);
         }
 
+        private Stage5Runtime(CityProgressionSession session) => this.session = session;
+        internal static Stage5Runtime ForVisualPreview() => new Stage5Runtime(
+            new CityProgressionSession(() => Time.timeAsDouble, new PreviewSave()));
+
+        private sealed class PreviewSave : ISaveRepository
+        {
+            private ProfileData profile;
+            public SaveLoadResult Load() => profile == null ? new SaveLoadResult(SaveLoadStatus.Missing) :
+                new SaveLoadResult(SaveLoadStatus.Ready, profile.Copy());
+
+            public SaveWriteStatus TryCommit(long expectedRevision, ProfileData candidate)
+            {
+                if ((profile?.revision ?? 0) != expectedRevision) return SaveWriteStatus.RevisionConflict;
+                if (candidate.revision != expectedRevision + 1 || !candidate.IsValid()) return SaveWriteStatus.InvalidProfile;
+                profile = candidate.Copy();
+                return SaveWriteStatus.Saved;
+            }
+        }
+
         internal static Stage5Runtime ForApplication()
         {
             var args = Environment.GetCommandLineArgs();
@@ -47,7 +66,7 @@ namespace Game.Core
 
         private static CityProgressionSession Open(string path) => new(() => Time.timeAsDouble, new JsonSaveRepository(path));
 
-        internal ProgressionResult Start(int seed, bool fullCity, out string id)
+        internal ProgressionResult Start(int seed, bool fullCity, out string id, string previewStage = null)
         {
             if (startId == null || startSeed != seed || startFullCity != fullCity)
             {
@@ -56,7 +75,8 @@ namespace Game.Core
                 startFullCity = fullCity;
             }
             id = startId;
-            var points = fullCity ? CityEconomy.FullRoute.SelectMany(segment => Points.Select(point =>
+            var segments = previewStage == null ? CityEconomy.FullRoute : new[] { previewStage };
+            var points = fullCity ? segments.SelectMany(segment => Points.Select(point =>
                 new ProgressionTransitionPoint(segment + "/" + point.RoadId, segment, point.RoadId, point.EntranceId, point.AllowedNpcs))).ToArray() : Points;
             var result = Session.StartRun(new ProgressionCommandKey(id, "start"), seed, points, fullCity);
             if (result.Status != ProgressionStatus.RetryableFailure) startId = null;
@@ -98,7 +118,7 @@ namespace Game.Core
         }
 
         private string TutorialMarker => Path.Combine(separateProfile ? directory + "-separate" : directory, "tutorial-seen");
-        internal bool HasSeenTutorial => !replayTutorial && File.Exists(TutorialMarker);
+        internal bool HasSeenTutorial => directory == null || !replayTutorial && File.Exists(TutorialMarker);
         internal void ReplayTutorial() => replayTutorial = true;
 
         internal void MarkTutorialSeen()

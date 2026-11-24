@@ -16,6 +16,7 @@ namespace Game.AI
         private TargetAwareness state;
         private Transform target;
         private DamageReceiver targetHealth;
+        private CoverNavigation coverRoute;
         public bool HasTarget => isActiveAndEnabled && State.HasTarget && TargetAvailable;
         public bool HasLineOfSight { get; private set; }
         public Vector2 PursuitPosition { get; private set; }
@@ -23,6 +24,14 @@ namespace Game.AI
         private TargetAwareness State => state ?? (state = new TargetAwareness(detectionRadius, lossRadius, memorySeconds));
         private bool TargetAvailable => target != null && target.gameObject.activeInHierarchy && targetHealth != null
             && targetHealth.isActiveAndEnabled && !targetHealth.IsDead;
+        internal void EnableCoverNavigation()
+        {
+            coverRoute = new CoverNavigation(GetComponent<Rigidbody2D>());
+            state = new TargetAwareness(detectionRadius, lossRadius, Mathf.Max(memorySeconds, 6f));
+        }
+
+        internal Vector2 Approach(Vector2 directHeading) =>
+            coverRoute == null ? directHeading : coverRoute.Heading(PursuitPosition);
         public void Configure(float detection, float loss, float memory, LayerMask mask)
         {
             if (isActiveAndEnabled) throw new InvalidOperationException("Configure perception before activation.");
@@ -46,7 +55,7 @@ namespace Game.AI
             Vector2 offset = (Vector2)target.position - (Vector2)transform.position;
             HasLineOfSight = offset.sqrMagnitude <= lossRadius * lossRadius && Visible(offset);
             bool tracked = State.Observe(offset.sqrMagnitude, HasLineOfSight, true, scaledDelta);
-            if (tracked && HasLineOfSight) PursuitPosition = target.position;
+            if (tracked && (HasLineOfSight || coverRoute != null)) PursuitPosition = target.position;
             if (!tracked) PursuitPosition = default;
             return tracked;
         }

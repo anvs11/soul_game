@@ -24,7 +24,9 @@ namespace Game.Core
         public int CitySegmentIndex { get; private set; }
         public string CitySegmentId => CityRegionRoute.IdAt(CitySegmentIndex);
         public bool IsFinalCitySegment => CitySegmentIndex == CityRegionRoute.SegmentCount - 1;
+        public bool IsLastCitySegment => CitySegmentIndex == CurrentRequest.LastPreviewSegment;
         public int CityMedkits { get; private set; }
+        internal CityAmmoBackpack CityAmmo { get; } = new();
         public CityFirearm CityWeapon { get; internal set; }
 
         public RunPhase Phase { get; private set; } = RunPhase.Booting;
@@ -33,6 +35,8 @@ namespace Game.Core
         public RunOutcome? LastOutcome { get; private set; }
         public string Error { get; private set; } = "";
         public Stage5Runtime Stage5 { get; private set; }
+        private Stage5Runtime visualRuntime;
+        internal Stage5Runtime CityRuntime => visualRuntime ?? Stage5;
         public bool Stage5FinishBlocked { get; private set; }
         public event Action Changed;
 
@@ -81,11 +85,17 @@ namespace Game.Core
                 throw new ArgumentException("Stage 2 route must start in its ordinary arena.", nameof(request));
             string id = null;
             CityRegionRoute cityRoute = null;
+            Stage5Runtime previewRuntime = null;
             if (request.IsStage5City)
             {
                 if (Stage5 == null || request.FixedEncounter == null) throw new InvalidOperationException("City requires a profile and encounter plan.");
                 if (request.IsFullCity) cityRoute = new CityRegionRoute(request.FixedEncounter);
-                var result = Stage5.Start(request.Seed, request.IsFullCity, out id);
+                if (request.VisualPreview != CityVisualPreview.None) previewRuntime = Stage5Runtime.ForVisualPreview();
+                string previewStage = request.FirstCitySegment > 0 ? CityRegionRoute.IdAt(request.FirstCitySegment) : null;
+                var runtime = previewRuntime ?? Stage5;
+                var result = runtime.Start(request.Seed, request.IsFullCity, out id, previewStage);
+                for (int index = 1; result.Failure == ProgressionFailure.None && index <= request.FirstCitySegment; ++index)
+                    result = runtime.Enter(id, CityRegionRoute.IdAt(index));
                 if (result.Failure != ProgressionFailure.None)
                 {
                     Error = Stage5Runtime.Describe(result.Failure);
@@ -97,8 +107,11 @@ namespace Game.Core
             StreetGeneration = request.IsStreetRun ? requestedGeneration : null;
             SegmentIndex = request.IsStreetRun ? 1 : 0;
             CurrentRequest = request;
+            visualRuntime = previewRuntime;
             FullCityRoute = cityRoute;
-            CitySegmentIndex = CityMedkits = 0;
+            CitySegmentIndex = request.FirstCitySegment;
+            CityMedkits = 0;
+            CityAmmo.Clear();
             CityWeapon = CityFirearm.Pistol;
             ActiveArena = request.ArenaId;
             PlayerTransfer = null;
@@ -131,7 +144,7 @@ namespace Game.Core
 
         internal void AdvanceCity(Func<CombatSnapshot> readState, int medkits)
         {
-            if (Phase != RunPhase.InArena || FullCityRoute == null || IsFinalCitySegment || pendingAdvance != null) return;
+            if (Phase != RunPhase.InArena || FullCityRoute == null || IsLastCitySegment || pendingAdvance != null) return;
             CityMedkits = medkits;
             pendingAdvance = readState;
         }
@@ -161,7 +174,7 @@ namespace Game.Core
                 }
                 if (CurrentRequest.IsFullCity)
                 {
-                    var entered = Stage5.Enter(RunId, CityRegionRoute.IdAt(CitySegmentIndex + 1));
+                    var entered = CityRuntime.Enter(RunId, CityRegionRoute.IdAt(CitySegmentIndex + 1));
                     if (entered.Failure != ProgressionFailure.None)
                     {
                         Error = Stage5Runtime.Describe(entered.Failure);
@@ -187,7 +200,7 @@ namespace Game.Core
         public void RetryHome()
         {
             if (disposed || Phase != RunPhase.Faulted) return;
-            if (CurrentRequest.IsStage5City && Stage5.Session.Snapshot.Run != null &&
+            if (CurrentRequest.IsStage5City && CityRuntime.Session.Snapshot.Run != null &&
                 !SaveStage5Finish(RunOutcome.Abandoned)) return;
             pendingOutcome = null;
             pendingAdvance = null;
@@ -206,7 +219,7 @@ namespace Game.Core
 
         private bool SaveStage5Finish(RunOutcome outcome)
         {
-            var result = Stage5.Finish(RunId, outcome);
+            var result = CityRuntime.Finish(RunId, outcome);
             if (result.Failure == ProgressionFailure.None)
             {
                 Stage5FinishBlocked = false;

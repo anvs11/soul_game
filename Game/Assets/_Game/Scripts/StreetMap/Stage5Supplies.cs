@@ -68,39 +68,89 @@ namespace Game.StreetMap
                 float y = session.Roll(key + "/height", 2) == 0 ? -3.4f : 3.4f;
                 var position = room.Center + new Vector2(side * (room.Bounds.width / 2f - 1.7f), y);
                 var size = new Vector2(1.45f, 2.8f);
-                var paint = district == 0 ? new Color(.23f, .28f, .26f) : new Color(.38f, .34f, .27f);
-                string containerName = district == 0 ? "Сгоревшая машина" : district == 1 ? "Контейнер склада" : "Шкаф снабжения";
+                if (map.RoomContours?.Overlaps(position, size + Vector2.one * .35f) == true)
+                    position.y = room.Center.y - y;
+                bool forklift = district == 1 && (i == 2 || i == 4);
+                bool occupied = forklift && i == 4;
+                var paint = forklift ? new Color(.77f,.57f,.20f) : district == 0 ? new Color(.23f,.28f,.26f) :
+                    district == 1 ? new Color(.52f,.38f,.24f) : new Color(.39f,.45f,.48f);
+                string containerName = forklift ? "Погрузчик" : district == 0 ? "Сгоревшая машина" :
+                    district == 1 ? "Коробки" : "Тумбочки";
                 var container = map.Tile(containerName, position, size, paint, 1);
                 AddObstacle(container);
-                map.Tile(district == 0 ? "Лобовое стекло" : "Панель", position + Vector2.up * .63f,
-                    new Vector2(1.15f, .44f), new Color(.09f, .12f, .12f), 2);
                 var door = position - Vector2.right * side * .59f;
-                map.Tile(district == 0 ? "Дверь машины" : "Ручка", door,
-                    new Vector2(.2f, .66f), new Color(.37f, .42f, .39f), 2);
+                Vector2 approach = position - Vector2.right * side * 1.14f;
+                Vector2 highlightSize = new Vector2(.22f,.72f);
+                if (forklift)
+                {
+                    map.Tile("Кабина погрузчика", position, new Vector2(.96f,1.1f), new Color(.15f,.19f,.20f), 2);
+                    for (int fork = -1; fork <= 1; fork += 2)
+                        map.Tile("Вилы", position + new Vector2(fork * .39f, 1.08f), new Vector2(.13f,.57f), new Color(.34f,.38f,.40f), 2);
+                    if (occupied)
+                    {
+                        door = approach;
+                        highlightSize = new Vector2(.61f,.96f);
+                        DrawBody(map, "Тело водителя погрузчика", approach, new Color(.50f,.49f,.25f));
+                    }
+                }
+                else if (district != 0)
+                {
+                    for (int seam = -1; seam <= 1; ++seam)
+                        map.Tile(district == 1 ? "Упаковочная лента" : "Ручка ящика",
+                            position + Vector2.up * (seam * .83f), new Vector2(district == 1 ? 1.19f : .54f,.20f),
+                            district == 1 ? new Color(.71f,.59f,.39f) : new Color(.23f,.29f,.32f), 2);
+                    highlightSize = new Vector2(.44f,.82f);
+                }
+                else
+                {
+                    map.Tile("Лобовое стекло", position + Vector2.up * .63f,
+                        new Vector2(1.15f,.44f), new Color(.09f,.12f,.12f), 2);
+                    map.Tile("Дверь машины", door, new Vector2(.2f,.66f), new Color(.37f,.42f,.39f), 2);
+                }
                 bool medkit = medkitBudget > 0 && session.Roll(key + "/medkit", 100) < 35;
                 if (medkit) medkitBudget--;
                 var cache = new Cache
                 {
-                    Approach = position - Vector2.right * side * 1.14f,
+                    Approach = approach,
                     Id = key,
                     ArmorDropOffset = -Vector2.right * side * .64f,
-                    Prompt = district == 0 ? "E · Обыскать машину" : "E · Обыскать запас",
+                    Prompt = occupied ? "E · Обыскать водителя" : forklift ? "E · Обыскать погрузчик" :
+                        district == 0 ? "E · Обыскать машину" : district == 1 ? "E · Обыскать коробки" : "E · Обыскать тумбочку",
                     Medkit = medkit,
                     Concealed = true,
                     Armor = TakeArmor(session, key, ref armorBudget)
                 };
                 if (cache.HasLoot)
                     cache.Highlight = map.Outline(district == 0 ? "Подсветка двери машины" : "Подсветка запаса",
-                        door, new Vector2(.22f, .72f));
+                        door, highlightSize);
                 caches.Add(cache);
             }
 
             var barrel = StreetMapLayout.Rooms[2].Center + new Vector2(-8.3f, 0);
-            AddArmorSpot(map, session, "supply/barrel", "Бочка со снабжением", "E · Обыскать бочку",
-                barrel, new Vector2(.65f, .65f), new Color(.33f, .28f, .2f), true, ref armorBudget);
-            AddArmorSpot(map, session, "supply/scrap", "Металлолом у входа", "E · Подобрать броню",
-                StreetMapLayout.Entry + new Vector2(4.7f, 3.7f), new Vector2(.48f, .31f),
-                new Color(.40f, .45f, .48f), false, ref armorBudget);
+            Vector2 entry = StreetMapLayout.Entry + new Vector2(4.7f, 3.7f);
+            if (district == 0)
+            {
+                AddArmorSpot(session, "supply/barrel", "Бочка со снабжением", "E · Обыскать бочку",
+                    barrel, new Vector2(.65f,.65f), new Color(.33f,.28f,.2f), true, false, ref armorBudget);
+                AddArmorSpot(session, "supply/scrap", "Металлолом у входа", "E · Подобрать броню",
+                    entry, new Vector2(.48f,.31f), new Color(.40f,.45f,.48f), false, false, ref armorBudget);
+            }
+            else
+            {
+                var uniform = new Color(.27f,.36f,.51f);
+                AddArmorSpot(session, "supply/barrel", "Тело полицейского", "E · Обыскать полицейского",
+                    barrel, new Vector2(.62f,.98f), uniform, false, true, ref armorBudget);
+                AddArmorSpot(session, "supply/scrap", "Тело полицейского у входа", "E · Обыскать полицейского",
+                    entry, new Vector2(.62f,.98f), uniform, false, true, ref armorBudget);
+            }
+        }
+
+        internal static GameObject DrawBody(Stage5PreviewController map, string title, Vector2 point, Color clothing)
+        {
+            var body = map.Tile(title, point, new Vector2(.50f,.60f), clothing, 1);
+            map.Tile("Голова погибшего", point + Vector2.up * .33f, new Vector2(.26f,.25f), new Color(.57f,.47f,.37f), 1);
+            map.Tile("Ботинки", point - Vector2.up * .32f, new Vector2(.38f,.23f), new Color(.12f,.15f,.19f), 1);
+            return body;
         }
 
         private static void AddObstacle(GameObject item)
@@ -126,11 +176,15 @@ namespace Game.StreetMap
             return corpseArmor;
         }
 
-        private void AddArmorSpot(Stage5PreviewController map, Stage5PreviewSession session, string key, string title,
-            string prompt, Vector2 position, Vector2 size, Color color, bool obstacle, ref int budget)
+        private void AddArmorSpot(Stage5PreviewSession session, string key, string title,
+            string prompt, Vector2 position, Vector2 size, Color color, bool obstacle, bool body, ref int budget)
         {
-            var item = map.Tile(title, position, size, color, 1);
-            if (obstacle) AddObstacle(item);
+            if (body) DrawBody(map, title, position, color);
+            else
+            {
+                var item = map.Tile(title, position, size, color, 1);
+                if (obstacle) AddObstacle(item);
+            }
             float amount = TakeArmor(session, key, ref budget);
             if (amount <= 0) return;
             caches.Add(new Cache
@@ -140,7 +194,7 @@ namespace Game.StreetMap
                 ArmorDropOffset = obstacle ? Vector2.right * .64f : Vector2.zero,
                 Prompt = prompt,
                 Armor = amount,
-                Concealed = obstacle,
+                Concealed = obstacle || body,
                 Highlight = map.Outline("Подсветка " + title, position, size)
             });
         }

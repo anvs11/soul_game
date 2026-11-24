@@ -779,7 +779,7 @@ namespace Game.Tests
         }
 
         [UnityTest]
-        public IEnumerator Stage7City_TabAppliesMedkitAndTalksToRealDealer()
+        public IEnumerator Stage7City_TabAppliesMedkitAndCompletesBothMarketDeals()
         {
             var keyboard = InputSystem.AddDevice<Keyboard>();
             var pump = new GameObject("Stage7 keyboard").AddComponent<MapTestInputPump>();
@@ -812,22 +812,48 @@ namespace Game.Tests
                 map.Leave();
                 yield return Until(() => boot.Coordinator.Phase == RunPhase.Home);
 
-                yield return StartCity(0);
+                yield return StartVisualPreview("Гипермаркет · 2-1");
                 map = Object.FindFirstObjectByType<StreetMapScreen>();
                 body = map.Player.GetComponent<Rigidbody2D>();
                 var preview = map.GetComponent<Stage5PreviewController>();
                 var wall = Object.FindObjectsByType<BoxCollider2D>(FindObjectsSortMode.None).First(item => item.name.StartsWith("Wall_", StringComparison.Ordinal));
                 Assert.That(wall.enabled && wall.GetComponent<SpriteRenderer>().forceRenderingOff, Is.True);
-                Park(body, Stage5PreviewController.DealerRoad);
-                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
-                yield return Until(() => preview.IsInside);
-                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
-                yield return null;
-                Park(body, body.position + Vector2.up * 4.2f);
-                pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
-                yield return Until(() => FindPreviewButton("Согласиться · Tab") != null);
-                for (int i = 0; i < 3; i++) yield return null;
-                Assert.That(FindPreviewButton("Согласиться · Tab"), Is.Not.Null, "Held Tab must not also confirm the offer.");
+                for (int roomIndex = 0; roomIndex < 2; roomIndex++) yield return ClearPreviewRoom(map, body, roomIndex);
+                foreach (var stop in new[]
+                         {
+                             (Stage5PreviewController.BrokerRoad, Game.Contracts.ProgressionNpcKind.WeaponDealer),
+                             (Stage5PreviewController.DealerRoad, Game.Contracts.ProgressionNpcKind.BottleDealer)
+                         })
+                {
+                    Park(body, stop.Item1);
+                    pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
+                    yield return Until(() => preview.IsInside);
+                    Vector2 exit = body.position;
+                    pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                    yield return null;
+                    // Reach the customer side of the counter, outside the former narrow target.
+                    Park(body, exit + new Vector2(1.2f, 1.8f));
+                    pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
+                    yield return Until(() => FindPreviewButton("Согласиться · Tab") != null);
+                    for (int i = 0; i < 3; i++) yield return null;
+                    Assert.That(FindPreviewButton("Согласиться · Tab"), Is.Not.Null, "Held Tab must not also confirm the offer.");
+                    pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                    yield return null;
+                    pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
+                    yield return Until(() => FindPreviewButton("Согласиться · Tab") == null);
+                    pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                    string reward = stop.Item2 == Game.Contracts.ProgressionNpcKind.WeaponDealer ? "Ускоренная подача" : "Колба Диллера";
+                    yield return Until(() => GameObject.Find("Название находки")?.GetComponent<Text>().text == reward);
+                    pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
+                    yield return Until(() => GameObject.Find("Название находки") == null);
+                    pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                    yield return null;
+                    Park(body, exit);
+                    pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState(Key.Tab));
+                    yield return Until(() => !preview.IsInside);
+                    pump.ApplyState = () => InputState.Change(keyboard, new KeyboardState());
+                    yield return null;
+                }
             }
             finally
             {
@@ -887,13 +913,39 @@ namespace Game.Tests
                 var reachable = StreetMapCatalog.Reachable(.45f);
                 foreach (var room in StreetMapLayout.Rooms)
                     Assert.That(reachable.Contains(Vector2Int.FloorToInt(room.Center)), Is.True, $"{segment}/{room.Id}");
+                var props = screen.GetComponentsInChildren<Transform>();
+                Assert.That(props.Any(prop => prop.name.StartsWith("Ящик · ", StringComparison.Ordinal)), Is.False);
+                var police = props.Where(prop => prop.name == "Тело полицейского с патронами").ToArray();
+                Assert.That(police.Length, Is.EqualTo(segment is 5 or 10 ? 1 : 0));
+                if (police.Length == 1)
+                {
+                    var cell = Vector2Int.FloorToInt(police[0].position);
+                    Assert.That(StreetMapLayout.Rooms[1].Bounds.Contains(cell) && reachable.Contains(cell), Is.True);
+                }
                 if (segment == 0) Apply(screen.Player.GetComponent<DamageReceiver>(), 58);
                 else Assert.That(screen.Player.ReadSnapshot().Health, Is.EqualTo(72));
                 if (segment is 5 or 10)
                 {
+                    if (segment == 10)
+                    {
+                        int prior = screen.Player.ReadSnapshot().ReserveAmmo;
+                        Park(body, police[0].position);
+                        screen.TryExit();
+                        Assert.That(screen.Player.ReadSnapshot().ReserveAmmo, Is.EqualTo(prior));
+                        Assert.That(GameObject.Find("Патроны · 5,56 мм"), Is.Not.Null);
+                    }
                     Park(body, StreetMapLayout.Entry + new Vector2(-3.4f, -1.3f));
                     screen.TryExit();
-                    Assert.That(screen.Player.ReadSnapshot().MagazineCapacity, Is.EqualTo(segment == 5 ? 18 : 6));
+                    int pack = segment == 5 ? 18 : 6;
+                    Assert.That(screen.Player.ReadSnapshot().MagazineCapacity, Is.EqualTo(pack));
+                    int reserve = screen.Player.ReadSnapshot().ReserveAmmo;
+                    Park(body, police[0].position);
+                    screen.TryExit();
+                    Assert.That(screen.Player.ReadSnapshot().ReserveAmmo, Is.EqualTo(reserve + pack));
+                    screen.TryExit();
+                    Assert.That(screen.Player.ReadSnapshot().ReserveAmmo, Is.EqualTo(reserve + pack));
+                    Assert.That(police[0].gameObject.activeSelf, Is.True);
+                    Assert.That(GameObject.Find("Контур тела полицейского"), Is.Null);
                 }
                 if (segment > 5 && segment < 10)
                     Assert.That(screen.Player.ReadSnapshot().MagazineCapacity, Is.EqualTo(18));
@@ -920,6 +972,155 @@ namespace Game.Tests
             coordinator.SetStage5Runtime(new Stage5Runtime(directory));
             Assert.That(coordinator.Stage5.Session.Snapshot.Profile.CompletedRegionIds, Is.EqualTo(new[] { "city" }));
             Assert.That(coordinator.Stage5.Session.Snapshot.Profile.ConfirmedCrystals, Is.EqualTo(lastBalance));
+        }
+
+        [UnityTest]
+        public IEnumerator CityVisualPreview_StreetEndsAfterThreeSegmentsWithoutWritingHomeProfile()
+        {
+            string profile = CityTestDirectory();
+            var run = boot.Coordinator;
+            run.SetStage5Runtime(new Stage5Runtime(profile));
+            yield return StartVisualPreview("Улица · 1-1 → 1-3");
+            for (int segment = 0; segment < 3; ++segment)
+            {
+                yield return Until(() => run.Phase == RunPhase.InArena && run.CitySegmentIndex == segment, run.Error);
+                var map = Object.FindFirstObjectByType<StreetMapScreen>();
+                if (segment == 1) Assert.That(GameObject.Find("Зебра"), Is.Not.Null);
+                if (segment == 2) Assert.That(GameObject.Find("Газон двора"), Is.Not.Null);
+                yield return ClearVisualSegment(map);
+                Park(map.Player.GetComponent<Rigidbody2D>(), map.Portal.transform.position);
+                map.TryExit();
+            }
+            yield return Until(() => run.Phase == RunPhase.Home, run.Error);
+            Assert.That(run.LastOutcome, Is.EqualTo(RunOutcome.Victory));
+            Assert.That(run.CitySegmentId, Is.EqualTo("1-3"));
+            Assert.That(run.Stage5.Session.Snapshot.Profile.Revision, Is.Zero);
+        }
+
+        [UnityTest]
+        public IEnumerator CityVisualPreview_MarketCheckoutIsOneUseAndOfficeLiftOpensRoof()
+        {
+            var run = boot.Coordinator;
+            run.SetStage5Runtime(new Stage5Runtime(CityTestDirectory()));
+            yield return StartVisualPreview("Гипермаркет · 2-1");
+            Assert.That(run.CitySegmentId, Is.EqualTo("2-1"));
+            Assert.That(GameObject.Find("Воротник шубы"), Is.Not.Null);
+            Assert.That(GameObject.Find("Подсобная · подпись"), Is.Not.Null);
+            Assert.That(GameObject.Find("Тело водителя погрузчика"), Is.Not.Null);
+            Assert.That(GameObject.Find("Тело полицейского"), Is.Not.Null);
+            var map = Object.FindFirstObjectByType<StreetMapScreen>();
+            var player = map.Player.GetComponent<Rigidbody2D>();
+            var controller = map.GetComponent<Stage5PreviewController>();
+            Assert.That(GameObject.Find("Обводка кассы"), Is.Null);
+            yield return ClearPreviewRoom(map, player, 0);
+            var checkout = GameObject.Find("Обводка кассы");
+            Assert.That(checkout, Is.Not.Null);
+            Park(player, checkout.transform.position);
+            yield return null;
+            int before = controller.Coins;
+            map.TryExit();
+            map.TryExit();
+            Assert.That(controller.Coins, Is.EqualTo(before + 2));
+            Assert.That(checkout.activeSelf, Is.False);
+            map.Leave();
+            yield return Until(() => run.Phase == RunPhase.Home);
+
+            yield return StartVisualPreview("Офис и лифт · 3-4 → 3-5");
+            Assert.That(run.CitySegmentId, Is.EqualTo("3-4"));
+            Assert.That(GameObject.Find("Тренажёрный зал · подпись"), Is.Not.Null);
+            Assert.That(GameObject.Find("Столовая · подпись"), Is.Not.Null);
+            Assert.That(GameObject.Find("Перегородка"), Is.Not.Null);
+            map = Object.FindFirstObjectByType<StreetMapScreen>();
+            yield return ClearVisualSegment(map);
+            Assert.That(GameObject.Find("Двери лифта"), Is.Not.Null);
+            Park(map.Player.GetComponent<Rigidbody2D>(), map.Portal.transform.position);
+            map.TryExit();
+            yield return Until(() => run.Phase == RunPhase.InArena && run.CitySegmentId == "3-5", run.Error);
+            Assert.That(run.Stage5.Session.Snapshot.Profile.Revision, Is.Zero);
+        }
+
+        [UnityTest]
+        public IEnumerator CityVisualPreview_IncompatibleCorpseAmmoWaitsOnGroundAndPacksOnSecondSearch()
+        {
+            yield return StartVisualPreview("Гипермаркет · 2-1");
+            var map = Object.FindFirstObjectByType<StreetMapScreen>();
+            var body = map.Player.GetComponent<Rigidbody2D>();
+            Park(body, StreetMapLayout.Entry + new Vector2(-3.4f, -1.3f));
+            map.TryExit();
+            Assert.That(map.Player.ReadSnapshot().MagazineCapacity, Is.EqualTo(18));
+            ShootingEnemy carrier = null;
+            for (int room = 0; room < 3 && carrier == null; room++)
+            {
+                Park(body, StreetMapLayout.Rooms[room + 1].Center);
+                var encounter = map.Rooms[room];
+                yield return Until(() => encounter.State.AliveCount == encounter.State.Plan.Waves[0].Spawns.Count);
+                carrier = Object.FindObjectsByType<ShootingEnemy>(FindObjectsSortMode.None)
+                    .FirstOrDefault(enemy => !enemy.IsDead && CityEconomy.RollLoot(0, enemy.name, EnemyTypes.Shooter).Ammo > 0);
+                if (carrier == null) yield return ClearPreviewRoom(map, body, room);
+            }
+            Assert.That(carrier, Is.Not.Null);
+            Park(body, carrier.transform.position);
+            Kill(carrier);
+            var before = map.Player.ReadSnapshot().ReserveAmmo;
+            map.TryExit();
+            var ground = GameObject.Find("Патроны · 9 мм");
+            Assert.That(ground, Is.Not.Null);
+            Assert.That(map.Player.ReadSnapshot().ReserveAmmo, Is.EqualTo(before));
+
+            Park(body, ground.transform.position);
+            map.TryExit();
+            Assert.That(ground.activeSelf, Is.False);
+            Assert.That(map.Player.ReadSnapshot().ReserveAmmo, Is.EqualTo(before));
+            FindPreviewButton("Рюкзак · B · 0").onClick.Invoke();
+            yield return Until(() => GameObject.Find("Патроны в рюкзаке")?.GetComponent<Text>().text.Contains("9 мм: 8") == true);
+            Assert.That(FindPreviewButton("Патроны в резерв · E").interactable, Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator CityVisualPreview_MeleeGoesAroundARealMarketShelf()
+        {
+            yield return StartVisualPreview("Гипермаркет · 2-1");
+            var map = Object.FindFirstObjectByType<StreetMapScreen>();
+            var playerBody = map.Player.GetComponent<Rigidbody2D>();
+            var layout = StreetMapLayout.Rooms[1];
+            Park(playerBody, layout.Center);
+            yield return Until(() => map.Rooms[0].State.AliveCount == map.Rooms[0].State.Plan.Waves[0].Spawns.Count);
+            var zombie = Object.FindObjectsByType<SandboxEnemy>(FindObjectsSortMode.None).First(enemy => !enemy.IsDead);
+            foreach (var actor in Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None))
+                if (actor != zombie && actor is IEnemyTarget enemy && !enemy.IsDead) Kill(actor);
+            var shelf = map.GetComponentsInChildren<BoxCollider2D>().First(item => item.name == "Стеллаж с продуктами" &&
+                layout.Bounds.Contains(Vector2Int.FloorToInt(item.transform.position)));
+            var origin = (Vector2)shelf.bounds.center;
+            var zombieBody = zombie.GetComponent<Rigidbody2D>();
+            Park(zombieBody, origin + Vector2.left * 2.1f);
+            Park(playerBody, origin + new Vector2(-2.1f, 2.2f));
+            var perception = zombie.GetComponent<EnemyPerception>();
+            yield return Until(() => perception.HasTarget);
+            Park(zombieBody, origin + Vector2.left * 2.1f);
+            Park(playerBody, origin + Vector2.right * 2.1f);
+            Assert.That(Physics2D.Linecast(zombieBody.position, playerBody.position, LayerMask.GetMask("World")).collider, Is.SameAs(shelf));
+            yield return Until(() => zombieBody.position.x > origin.x + .75f, "Melee stayed on the wrong side of the shelf.");
+        }
+
+        private IEnumerator StartVisualPreview(string label)
+        {
+            var home = Object.FindFirstObjectByType<HomeScreen>();
+            if (home.IsShowingResult) home.PrimaryButton.onClick.Invoke();
+            home.FixedSeedInput.text = "0";
+            FindPreviewButton("Карта города").onClick.Invoke();
+            FindPreviewButton(label).onClick.Invoke();
+            yield return Until(() => boot.Coordinator.Phase == RunPhase.InArena, boot.Coordinator.Error);
+        }
+
+        private static IEnumerator ClearVisualSegment(StreetMapScreen map)
+        {
+            var body = map.Player.GetComponent<Rigidbody2D>();
+            for (int room = 0; room < 3; ++room) yield return ClearPreviewRoom(map, body, room);
+            var final = map.Rooms[3];
+            Park(body, StreetMapLayout.Rooms[4].Center);
+            yield return Until(() => final.State.AliveCount == final.State.Plan.Waves[0].Spawns.Count);
+            foreach (var enemy in Object.FindObjectsByType<EliteEnemy>(FindObjectsSortMode.None)) Kill(enemy);
+            yield return Until(() => map.Portal.IsOpen);
         }
 
         private IEnumerator StartCity(int seed)

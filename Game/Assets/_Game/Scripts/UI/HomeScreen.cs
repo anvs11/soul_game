@@ -40,7 +40,8 @@ namespace Game.UI
         protected override string Title => IsShowingResult
             ? (boundRun.CurrentRequest.IsStage5City ? CityResultTitle : fixedStreet ? "1-1: " + OutcomeLabel : diagnostic ? "Stage 2: проверка завершена" : outcome==RunOutcome.Victory ? (stage2 ? "Stage 2: победа" : "Победа") : outcome==RunOutcome.Defeat ? "Поражение" : "Вылазка завершена") : "Убежище";
         private string CityResultTitle => outcome == RunOutcome.Defeat ? "Эвакуация в убежище" :
-            outcome == RunOutcome.Victory ? (boundRun.CurrentRequest.IsFullCity ? "CITY завершён" : "Улица зачищена") : "Возвращение с улицы";
+            outcome == RunOutcome.Victory ? (boundRun.CurrentRequest.VisualPreview != CityVisualPreview.None
+                ? "Проверочный маршрут завершён" : boundRun.CurrentRequest.IsFullCity ? "CITY завершён" : "Улица зачищена") : "Возвращение с улицы";
         protected override string Description => IsShowingResult
             && (boundRun.CurrentRequest.IsStage5Preview || boundRun.CurrentRequest.IsStage5City) ? Stage5Result()
             : IsShowingResult ? (diagnostic ? "Диагностическая арена, без босса и наград. Итог: " + OutcomeLabel : "Попытка завершена. Награды на этом этапе не начисляются.")
@@ -177,15 +178,27 @@ namespace Game.UI
         {
             cityProfilePanel?.gameObject.SetActive(false);
             if (cityMapPanel != null) { cityMapPanel.gameObject.SetActive(true); return; }
-            cityMapPanel = CreateCityDialog("Карта города", parent, 320);
-            Stage5PreviewView.Label("Районы", cityMapPanel, Vector2.up * 110, new Vector2(440, 70), 24).text =
-                "Город";
-            Stage5PreviewView.Button("Начать маршрут CITY", cityMapPanel, Vector2.up * 40,
+            cityMapPanel = CreateCityDialog("Карта города", parent, 506);
+            Stage5PreviewView.Button("Начать маршрут CITY", cityMapPanel, Vector2.up * 200,
                 () => StartSeededStreet(false, true, true));
             bool ranch = boundRun.Stage5.Session.Snapshot.Profile.CompletedRegionIds.Contains("city");
-            Stage5PreviewView.Label("Закрытые районы", cityMapPanel, Vector2.down * 35, new Vector2(430, 70), 18).text =
+            Stage5PreviewView.Label("Районы", cityMapPanel, Vector2.up * 129, new Vector2(430, 70), 18).text =
                 "Улица → Гипермаркет → Высотка\n" + (ranch ? "Ранчо открыто · маршрут в разработке" : "Ранчо закрыто · завершите CITY");
-            Stage5PreviewView.Button("Закрыть", cityMapPanel, Vector2.down * 106, () => cityMapPanel.gameObject.SetActive(false));
+            Stage5PreviewView.Label("Проверка районов", cityMapPanel, Vector2.up * 65, new Vector2(430, 28), 19).text =
+                "Визуальная проверка";
+            AddPreview("Улица · 1-1 → 1-3", 8, CityVisualPreview.Street);
+            AddPreview("Гипермаркет · 2-1", -48, CityVisualPreview.Market);
+            AddPreview("Офис и лифт · 3-4 → 3-5", -104, CityVisualPreview.Office);
+            Stage5PreviewView.Button("Закрыть", cityMapPanel, Vector2.down * 190, () => cityMapPanel.gameObject.SetActive(false));
+
+            void AddPreview(string label, float y, CityVisualPreview mode)
+            {
+                Stage5PreviewView.Button(label, cityMapPanel, Vector2.up * y, () =>
+                {
+                    cityMapPanel.gameObject.SetActive(false);
+                    StartSeededStreet(false, true, true, mode);
+                });
+            }
         }
 
         private static RectTransform CreateCityDialog(string title, Transform parent, float height)
@@ -211,7 +224,9 @@ namespace Game.UI
         {
             if (boundRun.CurrentRequest.IsStage5City)
             {
-                var snapshot = boundRun.Stage5.Session.Snapshot;
+                var snapshot = boundRun.CityRuntime.Session.Snapshot;
+                if (boundRun.CurrentRequest.VisualPreview != CityVisualPreview.None)
+                    return $"Визуальная проверка · {boundRun.CitySegmentId}\nКристаллы в пробе: {snapshot.LastRun?.ConfirmedCrystalsEarned ?? 0}. Баланс убежища сохранён.";
                 string result = $"Подтверждено за попытку: {snapshot.LastRun?.ConfirmedCrystalsEarned ?? 0} кристаллов\n" +
                     $"Монеты при завершении: {snapshot.LastRun?.FinalCoins ?? 0} · баланс в убежище: {snapshot.Profile.ConfirmedCrystals}";
                 return boundRun.CurrentRequest.IsFullCity && outcome == RunOutcome.Victory
@@ -325,11 +340,13 @@ namespace Game.UI
             stage5ProfilePanel.gameObject.SetActive(false);
         }
 
-        private void StartSeededStreet(bool stage5Preview, bool city = false, bool fullCity = false)
+        private void StartSeededStreet(bool stage5Preview, bool city = false, bool fullCity = false,
+            CityVisualPreview visualPreview = CityVisualPreview.None)
         {
             if (stage5Preview && Stage5PreviewProfile.For(boundRun).Scenario == PreviewProfileScenario.FutureSchema) return;
             int seed;
-            if (string.IsNullOrWhiteSpace(FixedSeedInput.text)) seed = BitConverter.ToInt32(Guid.NewGuid().ToByteArray(), 0);
+            if (string.IsNullOrWhiteSpace(FixedSeedInput.text)) seed = visualPreview == CityVisualPreview.None
+                ? BitConverter.ToInt32(Guid.NewGuid().ToByteArray(), 0) : 0;
             else if (!int.TryParse(FixedSeedInput.text, NumberStyles.Integer, CultureInfo.InvariantCulture, out seed))
             {
                 streetError = "Введите целое число от −2147483648 до 2147483647 или оставьте seed пустым.";
@@ -365,7 +382,7 @@ namespace Game.UI
                         string.Join("+", System.Linq.Enumerable.Select(wave.Spawns, spawn => spawn.SpawnId + "/" + spawn.EnemyTypeId + "@" + spawn.PointId)))))));
             try
             {
-                boundRun.StartRun(city ? RunRequest.Stage5City(result.Plan, fullCity) :
+                boundRun.StartRun(city ? RunRequest.Stage5City(result.Plan, fullCity, visualPreview) :
                     stage5Preview ? RunRequest.Stage5Preview(result.Plan) : RunRequest.FixedStreet1_1(result.Plan));
             }
             catch (InvalidOperationException exception)

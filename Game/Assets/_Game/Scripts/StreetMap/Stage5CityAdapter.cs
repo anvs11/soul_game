@@ -15,12 +15,13 @@ namespace Game.StreetMap
         private CityProgressionSession city;
         private readonly Queue<ProgressionCheckpoint> awaitingSave = new();
         private long actionIndex;
+        private GameObject marketCheckout;
         public bool HasPendingCheckpoint => awaitingSave.Count > 0;
         private ProgressionSnapshot CitySnapshot => city.Snapshot;
 
         private void ConnectCity()
         {
-            city = run.Stage5.Session;
+            city = run.CityRuntime.Session;
             BindFirearmIdentity();
             var weapon = hero.GetComponent<WeaponController>();
             if (run.CityWeapon != CityFirearm.Pistol) weapon.EquipCityFamily(run.CityWeapon);
@@ -58,6 +59,35 @@ namespace Game.StreetMap
 
         private ProgressionCheckpoint Checkpoint(string room) =>
             new(run.CitySegmentId, room, run.CitySegmentIndex * 4 + Array.FindIndex(screen.Rooms, candidate => candidate.RoomId == room));
+
+        internal void AddMarketCheckout()
+        {
+            Vector2 origin = StreetMapLayout.Rooms[1].Center + new Vector2(5.5f, -4.65f);
+            for (int lane = -1; lane <= 1; ++lane)
+            {
+                Vector2 point = origin + Vector2.right * (lane * 1.55f);
+                Tile("Касса", point, new Vector2(1.23f,.56f), new Color(.39f,.51f,.47f), 1);
+                Tile("Кассовый терминал", point + Vector2.right * .39f, new Vector2(.31f,.47f), new Color(.17f,.26f,.29f), 2);
+            }
+            marketCheckout = Outline("Обводка кассы", origin, new Vector2(1.23f,.57f));
+            marketCheckout.SetActive(false);
+        }
+
+        private bool AtMarketCheckout() => marketCheckout != null && marketCheckout.activeSelf &&
+            Near(marketCheckout.transform.position, 1.05f);
+
+        private bool TrySearchMarketCheckout()
+        {
+            if (!AtMarketCheckout()) return false;
+            var result = city.CollectMarketRegister(Key("2-1/register"), Checkpoint("combat_a"));
+            if (result.Failure == ProgressionFailure.None)
+            {
+                marketCheckout.SetActive(false);
+                notice = "В кассе · 2 монеты";
+                screen.Feedback?.Play(CityCue.Pickup);
+            }
+            return true;
+        }
 
         private void ReadDeath(string room, string spawn, string type, out int ammo, out int coins, out int crystals,
             out string ammoId, out string coinId, out string crystalId)
@@ -120,6 +150,7 @@ namespace Game.StreetMap
                 }
                 awaitingSave.Dequeue();
                 RemoveRoomCrystals(checkpoint.RoomId);
+                if (marketCheckout != null && checkpoint.RoomId == "combat_a") marketCheckout.SetActive(true);
                 notice = null;
             }
             return true;

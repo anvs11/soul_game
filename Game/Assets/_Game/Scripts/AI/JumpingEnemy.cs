@@ -108,7 +108,7 @@ namespace Game.AI
                     Vector2 heading = offset.normalized;
                     if (FlankInBuilding && offset.magnitude < definition.TriggerRange + 2f)
                         heading = (heading + Vector2.Perpendicular(heading) * .65f).normalized;
-                    body.linearVelocity = heading * Mathf.Min(definition.ChaseSpeed,offset.magnitude/Time.fixedDeltaTime);
+                    body.linearVelocity = perception.Approach(heading) * Mathf.Min(definition.ChaseSpeed,offset.magnitude/Time.fixedDeltaTime);
                 }
                 return;
             }

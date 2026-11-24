@@ -70,13 +70,13 @@ namespace Game.AI
             {
                 Phase=AttackPhase.Waiting;remaining=0;
                 if(skin!=null)skin.color=Color.cyan;
-                if(detected)body.linearVelocity=(perception.PursuitPosition-body.position).normalized*definition.Speed;
+                if(detected)body.linearVelocity=perception.Approach((perception.PursuitPosition-body.position).normalized)*definition.Speed;
                 return;
             }
             if(Phase==AttackPhase.Waiting)
             {
                 if(offset.magnitude<definition.MinimumRange){body.linearVelocity=-offset.normalized*definition.Speed;return;}
-                if(offset.magnitude>definition.PreferredRange){body.linearVelocity=offset.normalized*definition.Speed;return;}
+                if(offset.magnitude>definition.PreferredRange){body.linearVelocity=perception.Approach(offset.normalized)*definition.Speed;return;}
                 Phase=AttackPhase.Windup;remaining=definition.Windup;
                 if(skin!=null)skin.color=Color.yellow;
                 return;

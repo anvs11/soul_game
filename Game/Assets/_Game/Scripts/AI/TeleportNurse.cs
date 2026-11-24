@@ -67,7 +67,7 @@ namespace Game.AI
                     if (timer <= 0) phase = Phase.Patrol;
                     break;
                 default:
-                    if (ToHero.magnitude > 3.8f) Travel(ToHero.normalized, 2.7f * dt, dt);
+                    if (ToHero.magnitude > 3.8f || CoverBlocksHero) Pursue(2.7f * dt, dt);
                     if (timer > 0 || ToHero.magnitude > 5.5f || !Visible(Body.position, HeroPosition)) break;
                     heading = ToHero.sqrMagnitude > .001f ? ToHero.normalized : Vector2.down;
                     phase = Phase.Aim;

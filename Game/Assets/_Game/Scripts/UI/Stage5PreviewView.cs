@@ -9,7 +9,7 @@ namespace Game.UI
         private readonly Text balance, prompt, effect, offer, error;
         private readonly RectTransform dialog;
         private readonly RectTransform supplyPanel;
-        private readonly Text supplyTitle, backpackLabel;
+        private readonly Text supplyTitle, backpackLabel, ammoLabel, supplySecondaryLabel;
         private readonly Button applyMedkit, storeMedkit;
         private readonly Text rewardTitle, rewardDescription;
         private readonly Button retrySave;
@@ -37,9 +37,11 @@ namespace Game.UI
             backpackRect.sizeDelta = new Vector2(220, 38);
             backpackLabel = backpackButton.GetComponentInChildren<Text>();
             supplyPanel = Panel("Аптечки", safe);
-            supplyTitle = Label("Найденное снабжение", supplyPanel, Vector2.up * 103, new Vector2(420, 65), 24);
-            applyMedkit = Button("Применить · Tab", supplyPanel, Vector2.up * 27, apply);
+            supplyTitle = Label("Найденное снабжение", supplyPanel, Vector2.up * 118, new Vector2(420, 40), 24);
+            ammoLabel = Label("Патроны в рюкзаке", supplyPanel, Vector2.up * 76, new Vector2(420, 45), 18);
+            applyMedkit = Button("Применить · Tab", supplyPanel, Vector2.up * 18, apply);
             storeMedkit = Button("В рюкзак · E", supplyPanel, Vector2.down * 36, store);
+            supplySecondaryLabel = storeMedkit.GetComponentInChildren<Text>();
             Button("Закрыть · B", supplyPanel, Vector2.down * 101, closeSupply);
             supplyPanel.gameObject.SetActive(false);
 
@@ -66,14 +68,19 @@ namespace Game.UI
             rewardDescription.text = description;
         }
 
-        public void RenderSupplies(bool visible, bool open, bool found, int medkits, bool canHeal)
+        public void RenderSupplies(bool visible, bool open, bool found, int medkits, bool canHeal,
+            string ammo, bool hasCompatibleAmmo)
         {
             backpackLabel.transform.parent.gameObject.SetActive(visible);
             backpackLabel.text = $"Рюкзак · B · {medkits}";
             supplyPanel.gameObject.SetActive(visible && open);
             supplyTitle.text = found ? "Найдена аптечка на 10 HP" : $"В рюкзаке аптечек: {medkits}";
             applyMedkit.interactable = canHeal;
-            storeMedkit.gameObject.SetActive(found);
+            ammoLabel.gameObject.SetActive(!found && ammo != null);
+            ammoLabel.text = ammo;
+            storeMedkit.gameObject.SetActive(found || ammo != null);
+            storeMedkit.interactable = found || hasCompatibleAmmo;
+            supplySecondaryLabel.text = found ? "В рюкзак · E" : "Патроны в резерв · E";
         }
 
         public void Render(int coins, int pending, int confirmed, string hint, string effects, string question, string notice)

@@ -42,7 +42,7 @@ namespace Game.AI
             remaining -= dt;
             if (remaining > 0)
             {
-                if (!warning && ToHero.magnitude > 5.3f) Travel(ToHero.normalized, dt * 1.8f, dt);
+                if (!warning && (ToHero.magnitude > 5.3f || CoverBlocksHero)) Pursue(dt * 1.8f, dt);
                 return;
             }
             var health = GetComponent<DamageReceiver>();

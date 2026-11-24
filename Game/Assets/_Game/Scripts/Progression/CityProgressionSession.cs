@@ -143,6 +143,20 @@ namespace Game.Progression
                 return Applied;
             });
 
+        internal ProgressionResult CollectMarketRegister(ProgressionCommandKey key, ProgressionCheckpoint checkpoint) =>
+            Active(key, nameof(CollectMarketRegister), checkpoint, () =>
+            {
+                if (checkpoint.StageId != "2-1" || checkpoint.RoomId != "combat_a")
+                    return Reject(ProgressionFailure.InvalidRequest);
+                var problem = CheckRoom(checkpoint, out var room);
+                if (problem != ProgressionFailure.None) return Reject(problem);
+                if (room?.Cleared != true) return Reject(ProgressionFailure.WrongPhase);
+                if (run.MarketRegisterSearched) return Replayed;
+                run.MarketRegisterSearched = true;
+                run.Coins += 2;
+                return Applied;
+            });
+
         public ProgressionResult CollectLoot(ProgressionCommandKey key, string pickupId) =>
             Active(key, nameof(CollectLoot), pickupId, () =>
             {
@@ -171,6 +185,16 @@ namespace Game.Progression
                 if (accepted == drop.Remaining) run.Loot.Remove(pickupId);
                 else run.Loot[pickupId] = new ProgressionLootSnapshot(pickupId, drop.Checkpoint, drop.SpawnId,
                     drop.Kind, drop.Remaining - accepted);
+                return Applied;
+            });
+
+        internal ProgressionResult ReleaseAmmoToGround(ProgressionCommandKey key, string pickupId) =>
+            Active(key, nameof(ReleaseAmmoToGround), pickupId, () =>
+            {
+                if (!Id(pickupId)) return Reject(ProgressionFailure.InvalidRequest);
+                if (!run.Loot.TryGetValue(pickupId, out var drop) || drop.Kind != LootKind.Ammo)
+                    return Reject(ProgressionFailure.UnknownTarget);
+                run.Loot.Remove(pickupId);
                 return Applied;
             });
 
@@ -312,6 +336,7 @@ namespace Game.Progression
             public IReadOnlyList<string> Route { get; }
             public string StageId => Route[Stage];
             public int Coins;
+            public bool MarketRegisterSearched;
             public string StartingWeaponId { get; }
             public readonly List<ProgressionEffectSnapshot> BottleEffects = new();
             public List<ProgressionNpcSnapshot> Npcs { get; }

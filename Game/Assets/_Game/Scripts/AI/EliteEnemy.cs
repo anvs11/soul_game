@@ -15,6 +15,7 @@ namespace Game.AI
         private PlayerCombatFacade hero;
         private DamageReceiver heroDamage;
         private DamageReceiver health;
+        private CoverNavigation coverRoute;
         private bool dead;
         private long attackId;
         protected Rigidbody2D Body { get; private set; }
@@ -126,6 +127,13 @@ namespace Game.AI
             Body.linearVelocity = direction * (distance / dt);
             return distance;
         }
+
+        internal void EnableCoverNavigation() => coverRoute = new CoverNavigation(GetComponent<Rigidbody2D>());
+
+        protected bool CoverBlocksHero => coverRoute != null && !Visible(Body.position, HeroPosition);
+
+        protected void Pursue(float distance, float dt) =>
+            Travel(coverRoute?.Heading(HeroPosition) ?? ToHero.normalized, distance, dt);
         protected bool IsFree(Vector2 position, float radius)
         {
             var filter = new ContactFilter2D { useTriggers = false };

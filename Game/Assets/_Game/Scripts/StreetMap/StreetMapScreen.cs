@@ -26,6 +26,10 @@ namespace Game.StreetMap
         public int ClearedCount => cleared.Count;
         public FixedMapPortal Portal {get;private set;}
         public StreetMiniMap MiniMap {get;private set;}
+        internal CityRoomContours RoomContours { get; private set; }
+        internal Rect WorldCameraBounds => run?.FullCityRoute != null && run.CitySegmentIndex >= 5 && !run.IsFinalCitySegment
+            ? new Rect(-13, -14, 116, 56)
+            : StreetMapLayout.CameraBounds;
         private int lastStatus=-1;
         public event Action<string,string> RoomCleared;
         public PlayerCombatFacade Player => player;
@@ -74,6 +78,11 @@ namespace Game.StreetMap
                 if (enemies[i] == null) throw new InvalidOperationException("Missing diagnostic enemy.");
                 enemies[i].gameObject.SetActive(false);
             }
+            if (value.FullCityRoute != null)
+            {
+                RoomContours = new CityRoomContours(value.CitySegmentIndex, value.CurrentRequest.Seed);
+                RoomContours.AddBoundaries(transform);
+            }
             CreateRooms(value.RunId);
             MiniMap=gameObject.AddComponent<StreetMiniMap>();MiniMap.Initialize(this);
             var portal=new GameObject("FinalPortal");portal.transform.SetParent(transform,false);
@@ -91,15 +100,16 @@ namespace Game.StreetMap
                     art.transform.SetParent(transform, false);
                     if (value.CurrentRequest.IsFullCity && value.CitySegmentIndex >= 5)
                     {
-                        art.Build(CityRegionRoute.DistrictAt(value.CitySegmentIndex), value.IsFinalCitySegment);
-                        CityDistrictDressing.Build(preview, value.FullCityRoute.MapAt(value.CitySegmentIndex), value.CitySegmentIndex);
+                        art.Build(RoomContours, CityRegionRoute.DistrictAt(value.CitySegmentIndex), value.IsFinalCitySegment);
                     }
-                    else art.Build();
+                    else art.Build(RoomContours);
+                    if (value.FullCityRoute != null)
+                        CityDistrictDressing.Build(preview, value.FullCityRoute.MapAt(value.CitySegmentIndex), value.CitySegmentIndex);
                     Feedback = gameObject.AddComponent<CityFeedback>();
                     Feedback.Bind(player);
                     foreach (var room in Rooms) room.CanBeginEncounter = () => !preview.HasPendingCheckpoint;
-                    if (!value.Stage5.HasSeenTutorial)
-                        gameObject.AddComponent<CityTutorial>().Initialize(this, value.Stage5, controls.SafeRoot);
+                    if (!value.CityRuntime.HasSeenTutorial)
+                        gameObject.AddComponent<CityTutorial>().Initialize(this, value.CityRuntime, controls.SafeRoot);
                 }
             }
             if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = false;
@@ -199,6 +209,8 @@ namespace Game.StreetMap
                         ? CityHeavyBoss.Create(actorRoot.transform, sprite, player.GetComponent<ProjectilePool>().Template,
                             CityRegionRoute.DistrictAt(run.CitySegmentIndex))
                         : combatAssets.CreateElite(spawn.EnemyTypeId, actorRoot.transform);
+                    if (run.FullCityRoute != null && run.CitySegmentIndex >= 5 && actor is EliteEnemy eliteActor)
+                        eliteActor.EnableCoverNavigation();
                     actor.name = spawn.SpawnId;
                     actors.Add(actor);
                 }
@@ -248,6 +260,13 @@ namespace Game.StreetMap
                     if (run.FullCityRoute != null)
                     {
                         int district = CityRegionRoute.DistrictAt(run.CitySegmentIndex);
+                        if (district > 0)
+                        {
+                            var perception = actor.GetComponent<EnemyPerception>();
+                            if (perception == null && actor is SandboxEnemy)
+                                perception = actor.gameObject.AddComponent<EnemyPerception>();
+                            perception?.EnableCoverNavigation();
+                        }
                         if (actor is ShootingEnemy shooter) shooter.MarketVolley = district == 1;
                         if (actor is JumpingEnemy jumper) jumper.FlankInBuilding = district == 2;
                     }
@@ -294,10 +313,20 @@ namespace Game.StreetMap
                 Stage5PreviewController.WorldLabel(preview.transform, StreetMapLayout.Rooms[4].Center + new Vector2(-5, -3), "Канализация · закрыто");
                 return;
             }
-            for (int step = 0; step < 4; step++)
-                preview.Tile("Ступень", location + Vector2.up * (.2f * step - .3f), new Vector2(1.6f, .11f),
-                    new Color(.66f, .70f, .62f), 2);
-            string label = run.CitySegmentIndex == 13 ? "На крышу" : "На этаж выше";
+            bool lift = run.CitySegmentIndex == 13;
+            if (lift)
+            {
+                preview.Tile("Двери лифта", location, new Vector2(1.75f, 1.2f), new Color(.40f, .49f, .54f), 2);
+                preview.Tile("Створки лифта", location, new Vector2(.065f, 1.2f), new Color(.12f, .17f, .20f), 3);
+                preview.Tile("Индикатор лифта", location + new Vector2(.74f, .69f), new Vector2(.17f, .13f), new Color(.46f, .94f, .66f), 3);
+            }
+            else
+            {
+                for (int step = 0; step < 4; step++)
+                    preview.Tile("Ступень", location + Vector2.up * (.2f * step - .3f), new Vector2(1.6f, .11f),
+                        new Color(.66f, .70f, .62f), 2);
+            }
+            string label = lift ? "Лифт · на крышу" : "Лестница · на этаж выше";
             Stage5PreviewController.WorldLabel(preview.transform, location + Vector2.up, label);
         }
         private void Drop(RoomController room, PickupKind kind, Vector2 position)
@@ -330,14 +359,14 @@ namespace Game.StreetMap
         {
             if (run.CurrentRequest.IsStage5City)
             {
-                var label = CurrentRoomId switch
+                var label = CityDistrictDressing.RoomName(CityRegionRoute.DistrictAt(run.CitySegmentIndex), CurrentRoomId) ?? (CurrentRoomId switch
                 {
                     "combat_a" => "Первый перекрёсток",
                     "combat_b" => "Переулок",
                     "combat_c" => "Двор",
                     "elite" => "Финальный бой",
                     _ => "Вход на улицу"
-                };
+                });
                 string cityText = $"{label}\nВстречи {ClearedCount}/4";
                 foreach (var room in Rooms)
                 {
@@ -353,7 +382,9 @@ namespace Game.StreetMap
                 if (ClearedCount == 4)
                 {
                     string travel = !run.CurrentRequest.IsFullCity ? "Вернуться в убежище" : run.IsFinalCitySegment
-                        ? "Эвакуация с крыши" : "Дальше · " + CityRegionRoute.IdAt(run.CitySegmentIndex + 1);
+                        ? "Эвакуация с крыши" : run.IsLastCitySegment ? "Завершить проверку" :
+                        (run.CitySegmentIndex == 13 ? "Лифт" : run.CitySegmentIndex >= 10 ? "Лестница" : "Дальше") +
+                            " · " + CityRegionRoute.IdAt(run.CitySegmentIndex + 1);
                     cityText += Portal != null && Portal.IsOpen ? $"\n{travel} · E рядом" : "\nНажмите E для размещения портала";
                     if (!string.IsNullOrEmpty(run.Error)) cityText += "\n" + run.Error;
                 }
@@ -378,7 +409,7 @@ namespace Game.StreetMap
             DressCityExit();
             UpdateRoomLabel();
             if(Vector2.Distance(player.transform.position,Portal.transform.position)>1.5f)return;
-            if (run.CurrentRequest.IsFullCity && !run.IsFinalCitySegment)
+            if (run.CurrentRequest.IsFullCity && !run.IsLastCitySegment)
                 run.AdvanceCity(player.ReadSnapshot, preview.CarriedMedkits);
             else run.FinishRun(RunOutcome.Victory);
         }

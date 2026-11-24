@@ -137,7 +137,8 @@ namespace Game.AI
             if (Phase == AttackPhase.Chase)
             {
                 if (offset.magnitude > 1.1f)
-                    body.linearVelocity = offset.normalized * Mathf.Min(speed, Mathf.Max(0,offset.magnitude-1.1f)/Time.fixedDeltaTime);
+                    body.linearVelocity = (sensing ? perception.Approach(offset.normalized) : offset.normalized) *
+                        Mathf.Min(speed, Mathf.Max(0,offset.magnitude-1.1f)/Time.fixedDeltaTime);
                 else if ((!sensing || perception.HasLineOfSight) && ClearStrikePath(offset))
                 { strikeDirection = offset.sqrMagnitude > .0001f ? offset.normalized : Vector2.down; Phase = AttackPhase.Windup; phaseTime=WindupDuration; ShowArm(-100); }
                 return;

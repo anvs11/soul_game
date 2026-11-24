@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Game.Actors;
+using Game.Combat;
 using Game.Core;
 using Game.Contracts;
 using Game.Encounters;
@@ -78,6 +79,7 @@ namespace Game.StreetMap
         public int ConfirmedCrystals => city == null ? session.Confirmed : CitySnapshot.Profile.ConfirmedCrystals;
         public bool IsInside => inside != null;
         public Vector2 MapPosition => IsInside ? returnPoint : body.position;
+        internal CityRoomContours RoomContours => screen.RoomContours;
 
         internal void Initialize(StreetMapScreen map, RunCoordinator coordinator, BattleControls controls)
         {
@@ -91,10 +93,11 @@ namespace Game.StreetMap
             sprite = hero.GetComponent<SpriteRenderer>().sprite;
             foreach (var candidate in FindObjectsByType<BoundedFollowCamera>(FindObjectsSortMode.None))
                 if (candidate.gameObject.scene == gameObject.scene) cameraFollow = candidate;
+            cameraFollow?.Configure(hero.transform, screen.WorldCameraBounds);
             supplies = new Stage5Supplies(this, session, hero, Near, PlanCorpseArmor(screen.ActiveEncounter), ApplySupply,
                 CityRegionRoute.DistrictAt(run.CitySegmentIndex));
             if (run.CurrentRequest.IsFullCity) supplies.RestoreMedkits(run.CityMedkits);
-            view = new Stage5PreviewView(controls.SafeRoot, Accept, Decline, ToggleBackpack, ApplyMedkit, StoreMedkit,
+            view = new Stage5PreviewView(controls.SafeRoot, Accept, Decline, ToggleBackpack, ApplyMedkit, UseSupplySecondary,
                 CloseSupplies, run.RetryStage5Finish);
             input?.SetNpcContext(true, false, false);
             input?.SetNpcPassage(AtPassage);
@@ -154,9 +157,11 @@ namespace Game.StreetMap
         {
             var stop = new Stop { Kind = kind, Id = id, Road = road, Interior = interior, Price = price, Live = city != null };
             stops.Add(stop);
-            bool vertical = kind == PreviewNpc.Broker;
+            int district = CityRegionRoute.DistrictAt(run.CitySegmentIndex);
+            bool dealer = kind == PreviewNpc.Dealer;
+            bool vertical = !dealer;
             Vector2 threshold = road - (vertical ? Vector2.right : Vector2.up) * .57f;
-            if (vertical)
+            if (vertical && district == 0)
             {
                 var mouth = threshold - Vector2.right * .58f;
                 Tile("Проход между домами", mouth, new Vector2(1.35f, 1.9f), new Color(.08f, .105f, .11f), 1);
@@ -164,32 +169,42 @@ namespace Game.StreetMap
             }
             else
             {
-                Tile("Дверь Диллера", threshold - Vector2.up * .28f, new Vector2(1.42f, .73f), new Color(.30f, .21f, .15f), 1);
-                Outline("Вход " + stop.Name, threshold - Vector2.up * .21f, new Vector2(1.44f, .54f));
+                var inward = vertical ? Vector2.left : Vector2.down;
+                Tile("Дверь · " + stop.Name, threshold + inward * .28f, vertical ? new Vector2(.73f,1.42f) : new Vector2(1.42f,.73f),
+                    district == 1 && dealer ? new Color(.42f,.58f,.65f) : new Color(.30f,.21f,.15f), 1);
+                Outline("Вход " + stop.Name, threshold + inward * .21f, vertical ? new Vector2(.54f,1.44f) : new Vector2(1.44f,.54f));
             }
             var floor = kind == PreviewNpc.Broker ? new Color(.14f, .16f, .18f) : new Color(.19f, .15f, .13f);
+            if (district == 1 && dealer) floor = new Color(.27f,.39f,.43f);
+            if (district == 2) floor = dealer ? new Color(.29f,.28f,.21f) : new Color(.22f,.27f,.34f);
             Tile(stop.Name + " · пол", interior, new Vector2(12, 10), floor, -3);
             Wall(interior + new Vector2(-6, 0), new Vector2(.5f, 10));
             Wall(interior + new Vector2(6, 0), new Vector2(.5f, 10));
             Wall(interior + new Vector2(0, 5), new Vector2(12, .5f));
             Wall(interior + new Vector2(0, -5), new Vector2(12, .5f));
             Tile("Выход", Exit(stop), new Vector2(1.2f, .35f), Color.white, 1);
-            Tile(stop.Name, interior + Vector2.up * 2.4f, new Vector2(.85f, 1.15f),
-                kind == PreviewNpc.Broker ? new Color(.6f, .47f, .29f) : new Color(.42f, .35f, .58f), 2);
+            Vector2 npcPosition = interior + Vector2.up * 2.4f;
+            bool winterCoat = district == 1 && dealer;
+            Tile(stop.Name, npcPosition, new Vector2(winterCoat ? 1.13f : .85f, 1.15f),
+                winterCoat ? new Color(.53f,.40f,.25f) : dealer ? new Color(.42f,.35f,.58f) : new Color(.6f,.47f,.29f), 2);
+            if (winterCoat)
+                Tile("Воротник шубы", npcPosition + Vector2.up * .25f, new Vector2(1.10f,.22f), new Color(.77f,.69f,.54f), 3);
             WorldLabel(transform, interior + Vector2.up * 3.2f, stop.Name);
             if (kind == PreviewNpc.Dealer)
             {
-                Tile("Свет лампы", interior + Vector2.up * 1.4f, new Vector2(5f, 4f), new Color(.29f, .24f, .17f), -2);
+                Tile("Свет лампы", interior + Vector2.up * 1.4f, new Vector2(5f, 4f),
+                    winterCoat ? new Color(.36f,.48f,.53f) : new Color(.29f,.24f,.17f), -2);
                 Tile("Стол", interior + Vector2.up * 1.25f, new Vector2(2.2f, .75f), new Color(.36f, .24f, .15f), 1);
                 Tile("Стул", interior + new Vector2(-1.5f, 1.2f), Vector2.one * .6f, floor * 1.6f, 1);
                 Tile("Стул", interior + new Vector2(1.5f, 1.2f), Vector2.one * .6f, floor * 1.6f, 1);
                 Tile("Лампа", interior + Vector2.up * 3.65f, Vector2.one * .28f, new Color(.9f, .75f, .45f), 1);
             }
-            else
+            else if (district == 0)
             {
                 Wall(interior + new Vector2(-2.5f, 0), new Vector2(.7f, 7));
                 Wall(interior + new Vector2(2.5f, 0), new Vector2(.7f, 7));
             }
+            CityDistrictDressing.DressTraderRoom(this, interior, district, dealer);
         }
 
         internal GameObject Tile(string label, Vector2 position, Vector2 size, Color color, int order)
@@ -327,8 +342,7 @@ namespace Game.StreetMap
         {
             if (supplies.Open)
             {
-                if (supplies.FoundMedkit) StoreMedkit();
-                else CloseSupplies();
+                UseSupplySecondary();
                 return true;
             }
             if (IsInside)
@@ -338,6 +352,7 @@ namespace Game.StreetMap
                 return true;
             }
             if (AtPassage()) { TryVisit(); return true; }
+            if (TrySearchMarketCheckout()) return true;
             if (armory != null && armory.Use(body.position, out var response))
             {
                 notice = response;
@@ -353,18 +368,27 @@ namespace Game.StreetMap
             if (corpse == null) return false;
             int ammo = CollectAmmo(corpse);
             bool foundArmor = corpse.Armor > 0;
+            corpse.Ammo -= ammo;
+            Vector2 center = corpse.Body.transform.position;
+            Vector2 towardHero = (body.position - center).normalized;
             if (foundArmor)
             {
-                Vector2 center = corpse.Body.transform.position;
-                Vector2 towardHero = body.position - center;
-                Vector2 drop = center + towardHero.normalized * .42f;
+                Vector2 drop = center + towardHero * .42f;
                 supplies.DropArmor(corpse.ArmorId, Near(drop, 1.25f) ? drop : center, corpse.Armor);
                 corpse.Armor = 0;
             }
-            corpse.Ammo -= ammo;
+            bool droppedAmmo = armory != null && corpse.Ammo > 0 &&
+                city.ReleaseAmmoToGround(Attempt("drop-ammo"), corpse.AmmoId).Failure == ProgressionFailure.None;
+            if (droppedAmmo)
+            {
+                Vector2 drop = center + towardHero * .42f;
+                if (foundArmor) drop += Vector2.Perpendicular(towardHero) * .55f;
+                armory.DropAmmo(CityFirearm.Pistol, Near(drop, 1.5f) ? drop : center, corpse.Ammo);
+                corpse.Ammo = 0;
+            }
             if (ammo > 0) screen.Feedback?.Play(CityCue.Pickup);
-            notice = foundArmor ? "Найдена броня" : ammo > 0 ? $"Патроны +{ammo}" :
-                run.CityWeapon != Game.Combat.CityFirearm.Pistol ? "В теле патроны 9 мм" : "Резерв патронов полон";
+            notice = droppedAmmo ? (foundArmor ? "Найдены броня и патроны 9 мм" : "Патроны 9 мм на земле") :
+                foundArmor ? "Найдена броня" : ammo > 0 ? $"Патроны +{ammo}" : "Резерв патронов полон";
             if (corpse.Ammo == 0 && corpse.Armor <= 0)
             {
                 bodies.Remove(corpse);
@@ -401,8 +425,10 @@ namespace Game.StreetMap
         }
 
         private static Vector2 Exit(Stop stop) => stop.Interior + Vector2.down * 4f;
+        private bool AtExit(Stop stop) => Near(Exit(stop), 1.3f);
+        private bool AtCounter(Stop stop) => !AtExit(stop) && Near(stop.Interior + Vector2.up * .4f, 3.6f);
         private bool AtPassage() => CanInteract && !offerOpen && !supplies.Open &&
-            (inside == null ? NearbyEntrance() != null : Near(Exit(inside), 1.3f));
+            (inside == null ? NearbyEntrance() != null : AtExit(inside));
 
         public void TryVisit()
         {
@@ -419,14 +445,14 @@ namespace Game.StreetMap
                 return;
             }
             if (offerOpen) { Accept(); return; }
-            if (Near(Exit(inside), 1.3f))
+            if (AtExit(inside))
             {
                 inside = null;
                 notice = null;
-                MoveHero(returnPoint, StreetMapLayout.CameraBounds);
+                MoveHero(returnPoint, screen.WorldCameraBounds);
                 return;
             }
-            if (!Near(inside.Interior + Vector2.up, 2.2f)) return;
+            if (!AtCounter(inside)) return;
             if (inside.State == Deal.Ready)
             {
                 if (city != null)
@@ -470,6 +496,15 @@ namespace Game.StreetMap
             supplies.Store();
             notice = null;
             SyncSupplyInput();
+        }
+
+        private void UseSupplySecondary()
+        {
+            if (!CanInteract || !supplies.Open) return;
+            if (supplies.FoundMedkit) { StoreMedkit(); return; }
+            if (armory == null) { CloseSupplies(); return; }
+            int added = run.CityAmmo.Take(run.CityWeapon, hero.TryAddReserve);
+            if (added > 0) screen.Feedback?.Play(CityCue.Pickup);
         }
 
         private void CloseSupplies()
@@ -542,12 +577,13 @@ namespace Game.StreetMap
             var corpse = CanInteract && inside == null && stop == null ? NearbyBody() : null;
             if (corpse == null && notice == "Резерв патронов полон") notice = null;
             if (inside == null && stop == null && CanInteract)
-                hint = armory?.Prompt(body.position) ?? supplies.Prompt(body.position, DistanceToBodySquared(corpse)) ?? corpse?.Prompt ?? "";
+                hint = AtMarketCheckout() ? "E · Обыскать кассу" :
+                    armory?.Prompt(body.position) ?? supplies.Prompt(body.position, DistanceToBodySquared(corpse)) ?? corpse?.Prompt ?? "";
             if (inside == null && stop != null) hint = "Space / Tab / E · Пройти";
             if (inside != null)
             {
-                hint = Near(Exit(stop), 1.3f) ? "Space / Tab / E · На улицу" : stop.Name;
-                if (Near(stop.Interior + Vector2.up, 2.2f))
+                hint = AtExit(stop) ? "Space / Tab / E · На улицу" : "Подойдите к " + (stop.Kind == PreviewNpc.Dealer ? "Диллеру" : "Барыге");
+                if (AtCounter(stop))
                     hint = stop.State switch
                     {
                         Deal.Available => stop.Name + " · Tab: поговорить",
@@ -564,9 +600,10 @@ namespace Game.StreetMap
             var current = city == null ? null : CitySnapshot;
             if (current != null) effect = CityEffects(current.Run);
             view.RenderSupplies(CanInteract && !offerOpen, supplies.Open, supplies.FoundMedkit,
-                supplies.BackpackMedkits, supplies.CanHeal);
+                supplies.BackpackMedkits, supplies.CanHeal, armory == null ? null : BackpackAmmoText(),
+                armory != null && run.CityAmmo.Count(run.CityWeapon) > 0);
             bool showReward = CanInteract && inside != null && inside.State == Deal.Ready &&
-                !offerOpen && !supplies.Open && Near(inside.Interior + Vector2.up, 2.2f);
+                !offerOpen && !supplies.Open && AtCounter(inside);
             view.RenderReward(showReward ? inside.RewardTitle : null, showReward ? inside.RewardDescription : null);
             view.RenderSaveRetry(run.Stage5FinishBlocked ? run.Error : null);
             view.Render(current == null ? Coins : current.Run?.Coins ?? 0,
@@ -578,6 +615,10 @@ namespace Game.StreetMap
         }
 
         internal int CarriedMedkits => supplies.BackpackMedkits;
+
+        private string BackpackAmmoText() =>
+            $"Патроны · {run.CityAmmo.Packs:0.##}/4 обойм\n" +
+            $"9 мм: {run.CityAmmo.Count(CityFirearm.Pistol)}   ·   .45: {run.CityAmmo.Count(CityFirearm.SubmachineGun)}   ·   5,56: {run.CityAmmo.Count(CityFirearm.Carbine)}";
 
         internal void Finish()
         {

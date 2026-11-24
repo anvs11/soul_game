@@ -58,7 +58,7 @@ namespace Game.AI
                     cooldown = 2.5f;
                 }
             }
-            if (ToHero.magnitude > 5f) Travel(ToHero.normalized, 1.8f * dt, dt);
+            if (ToHero.magnitude > 5f || CoverBlocksHero) Pursue(1.8f * dt, dt);
         }
         private bool TryThrow(bool large)
         {

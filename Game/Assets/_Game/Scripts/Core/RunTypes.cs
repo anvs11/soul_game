@@ -18,6 +18,7 @@ namespace Game.Core
 
     public enum RunOutcome { Victory, Defeat, Abandoned }
     public enum RunPhase { Booting, Home, LoadingArena, InArena, ReturningHome, Faulted }
+    public enum CityVisualPreview { None, Street, Market, Office }
 
     public readonly struct RunRequest
     {
@@ -27,13 +28,16 @@ namespace Game.Core
         public bool IsStage5Preview { get; }
         public bool IsStage5City { get; }
         public bool IsFullCity { get; }
+        public CityVisualPreview VisualPreview { get; }
+        internal int FirstCitySegment => VisualPreview switch { CityVisualPreview.Market => 5, CityVisualPreview.Office => 13, _ => 0 };
+        internal int LastPreviewSegment => VisualPreview switch { CityVisualPreview.Street => 2, CityVisualPreview.Market => 5, _ => 14 };
         public bool IsStreetRun => ArenaId == ScenePaths.Stage3StreetSandbox;
         public bool IsFixedStreet1_1 => ArenaId == ScenePaths.Stage4StreetMap;
         public bool IsStage2Route { get; }
         public bool IsStage2Diagnostic => ArenaId == ScenePaths.Stage2CombatSandbox && !IsStage2Route;
 
         public RunRequest(string arenaId, int seed, bool isStage2Route = false, EncounterPlan fixedEncounter = null,
-            bool stage5Preview = false, bool stage5City = false, bool fullCity = false)
+            bool stage5Preview = false, bool stage5City = false, bool fullCity = false, CityVisualPreview visualPreview = CityVisualPreview.None)
         {
             ArenaId = arenaId;
             Seed = seed;
@@ -42,6 +46,7 @@ namespace Game.Core
             IsStage5Preview = stage5Preview;
             IsStage5City = stage5City;
             IsFullCity = fullCity;
+            VisualPreview = visualPreview;
         }
 
         public static RunRequest StreetRun(int seed = 0) => new RunRequest(ScenePaths.Stage3StreetSandbox, seed);
@@ -53,8 +58,9 @@ namespace Game.Core
         public static RunRequest Stage5Preview(EncounterPlan plan) =>
             new RunRequest(ScenePaths.Stage4StreetMap, plan.Seed, fixedEncounter: plan, stage5Preview: true);
 
-        public static RunRequest Stage5City(EncounterPlan plan, bool fullCity = false) =>
-            new RunRequest(ScenePaths.Stage4StreetMap, plan.Seed, fixedEncounter: plan, stage5City: true, fullCity: fullCity);
+        public static RunRequest Stage5City(EncounterPlan plan, bool fullCity = false, CityVisualPreview preview = CityVisualPreview.None) =>
+            new RunRequest(ScenePaths.Stage4StreetMap, plan.Seed, fixedEncounter: plan, stage5City: true,
+                fullCity: fullCity || preview != CityVisualPreview.None, visualPreview: preview);
 
         public static RunRequest Stage2(int seed = 0) => new RunRequest(ScenePaths.Stage2CombatSandbox, seed, true);
 
