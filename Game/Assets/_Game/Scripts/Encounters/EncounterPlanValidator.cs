@@ -47,8 +47,9 @@ namespace Game.Encounters
                             if(Overlap(point,EnemyTypes.Radius(spawn.EnemyTypeId),hero,.45f))return EncounterResult.Failure("HERO_OVERLAP: "+spawn.SpawnId);
                         for(int child=0;child<spawn.ReservedSummons;child++)
                             if(!spawnIds.Add(spawn.SummonId(child)))return EncounterResult.Failure("DUPLICATE_SUMMON: "+spawn.SpawnId);
-                        boss |= spawn.EnemyTypeId == EnemyTypes.HeavyBoss;
-                        if (room.IsElite != (EnemyTypes.IsElite(spawn.EnemyTypeId) || spawn.EnemyTypeId == EnemyTypes.HeavyBoss))
+                        bool isBoss = EnemyTypes.IsBoss(spawn.EnemyTypeId);
+                        boss |= isBoss;
+                        if (room.IsElite != (EnemyTypes.IsElite(spawn.EnemyTypeId) || isBoss))
                             return EncounterResult.Failure("ROOM_ENEMY_KIND: " + room.RoomId);
                         for (int previous = 0; previous < index; previous++)
                         {

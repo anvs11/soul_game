@@ -23,9 +23,17 @@ namespace Game.StreetMap
                 var point=origin+new Vector2(Mathf.Cos(angle),Mathf.Sin(angle))*(2.5f+ring);
                 if (ReservedPosition.HasValue && (point - ReservedPosition.Value).sqrMagnitude < 3.2f * 3.2f) continue;
                 if(!Available(point,origin))continue;
-                transform.position=point;IsOpen=true;skin.enabled=true;return true;
+                return OpenAt(point);
             }
             return false;
+        }
+        internal bool OpenAt(Vector2 point)
+        {
+            if (IsOpen) return true;
+            transform.position = point;
+            IsOpen = true;
+            skin.enabled = true;
+            return true;
         }
         public static bool Available(Vector2 point,Vector2 origin)
         {

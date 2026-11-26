@@ -24,10 +24,10 @@ namespace Game.StreetMap
             map=Rect("FullStreetMap",safe); map.anchorMin=map.anchorMax=map.pivot=new Vector2(1,1);
             map.anchoredPosition=new Vector2(-20,-90); map.sizeDelta=new Vector2(280,140);
             var background=map.gameObject.AddComponent<Image>(); background.color=new Color(.02f,.04f,.05f,.85f); background.raycastTarget=false;
-            foreach(var corridor in StreetMapLayout.Corridors) Paint("Road",corridor.center,corridor.size,new Color(.35f,.4f,.4f));
-            for (int i = 0; i < StreetMapLayout.Rooms.Count; i++)
+            foreach(var corridor in screen.MapCorridors) Paint("Road",corridor.center,corridor.size,new Color(.35f,.4f,.4f));
+            for (int i = 0; i < screen.MapRooms.Count; i++)
             {
-                var room = StreetMapLayout.Rooms[i];
+                var room = screen.MapRooms[i];
                 if (screen.RoomContours == null) rooms.Add((i, Paint(room.Id, room.Center, room.Bounds.size, Color.gray)));
                 else foreach (var strip in screen.RoomContours.Strips(room.Bounds))
                     rooms.Add((i, Paint(room.Id, strip.center, strip.size, Color.gray)));
@@ -37,9 +37,10 @@ namespace Game.StreetMap
             var text=label.gameObject.AddComponent<Text>();text.font=Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");text.fontSize=14;text.color=Color.white;text.text="Карта · жёлтая точка — вы";text.alignment=TextAnchor.MiddleCenter;text.raycastTarget=false;
         }
         public static Vector2 Project(Vector2 world) => (world-StreetMapLayout.CameraBounds.center)*2.4f;
+        private Vector2 ProjectPosition(Vector2 world) => (world - source.MiniMapBounds.center) * 2.4f;
         private Image Paint(string name,Vector2 center,Vector2 size,Color color)
         {
-            var rect=Rect(name,map);rect.anchoredPosition=Project(center);rect.sizeDelta=size*2.4f;
+            var rect=Rect(name,map);rect.anchoredPosition=ProjectPosition(center);rect.sizeDelta=size*2.4f;
             var image=rect.gameObject.AddComponent<Image>();image.color=color;image.raycastTarget=false;return image;
         }
         private static RectTransform Rect(string name,Transform parent)
@@ -48,7 +49,7 @@ namespace Game.StreetMap
         {
             if(source==null || marker==null)return;
             if(lastSafe!=Screen.safeArea)ApplySafe();
-            marker.anchoredPosition=Project(source.MiniMapPosition);
+            marker.anchoredPosition=ProjectPosition(source.MiniMapPosition);
             foreach (var room in rooms)
                 room.Image.color = source.HasVisited(room.Room) ? new Color(.25f,.7f,.6f) : new Color(.35f,.4f,.45f);
         }

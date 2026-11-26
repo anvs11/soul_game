@@ -1,0 +1,17 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2667e1fab3c247e68b9cea8670951997, type: 3}
+  m_Name: RanchStage
+  m_EditorClassIdentifier:
+  deer: {fileID: 6197448385415203575, guid: e66e62bad1e343d0a294b6a9353c2cf7, type: 3}
+  trap: {fileID: 6197448385415203575, guid: 36a529d838af4c5892c4798a745a5316, type: 3}
+  ammo: 8

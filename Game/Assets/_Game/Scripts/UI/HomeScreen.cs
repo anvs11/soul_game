@@ -38,7 +38,8 @@ namespace Game.UI
         protected override void OnBound(RunCoordinator value)
         { boundRun=value; outcome=value.LastOutcome; IsShowingResult=outcome.HasValue; diagnostic=value.CurrentRequest.IsStage2Diagnostic; stage2=value.CurrentRequest.IsStage2Route; fixedStreet=value.CurrentRequest.IsFixedStreet1_1; }
         protected override string Title => IsShowingResult
-            ? (boundRun.CurrentRequest.IsStage5City ? CityResultTitle : fixedStreet ? "1-1: " + OutcomeLabel : diagnostic ? "Stage 2: проверка завершена" : outcome==RunOutcome.Victory ? (stage2 ? "Stage 2: победа" : "Победа") : outcome==RunOutcome.Defeat ? "Поражение" : "Вылазка завершена") : "Убежище";
+            ? (boundRun.CurrentRequest.IsRanchPreview ? "Ранчо · 5-1: " + OutcomeLabel :
+                boundRun.CurrentRequest.IsStage5City ? CityResultTitle : fixedStreet ? "1-1: " + OutcomeLabel : diagnostic ? "Stage 2: проверка завершена" : outcome==RunOutcome.Victory ? (stage2 ? "Stage 2: победа" : "Победа") : outcome==RunOutcome.Defeat ? "Поражение" : "Вылазка завершена") : "Убежище";
         private string CityResultTitle => outcome == RunOutcome.Defeat ? "Эвакуация в убежище" :
             outcome == RunOutcome.Victory ? (boundRun.CurrentRequest.VisualPreview != CityVisualPreview.None
                 ? "Проверочный маршрут завершён" : boundRun.CurrentRequest.IsFullCity ? "CITY завершён" : "Улица зачищена") : "Возвращение с улицы";
@@ -190,7 +191,8 @@ namespace Game.UI
             AddPreview("Гипермаркет · 2-1", -19, CityVisualPreview.Market);
             AddPreview("Офис и лифт · 3-4 → 3-5", -75, CityVisualPreview.Office);
             AddPreview("Крыша и канализация · 3-5 → 4-5", -131, CityVisualPreview.Sewer);
-            Stage5PreviewView.Button("Закрыть", cityMapPanel, Vector2.down * 225, () => cityMapPanel.gameObject.SetActive(false));
+            Stage5PreviewView.Button("Проверка ранчо · 5-1", cityMapPanel, Vector2.down * 187, StartRanchPreview);
+            Stage5PreviewView.Button("Закрыть", cityMapPanel, Vector2.down * 245, () => cityMapPanel.gameObject.SetActive(false));
 
             void AddPreview(string label, float y, CityVisualPreview mode)
             {
@@ -355,15 +357,7 @@ namespace Game.UI
             CityVisualPreview visualPreview = CityVisualPreview.None)
         {
             if (stage5Preview && Stage5PreviewProfile.For(boundRun).Scenario == PreviewProfileScenario.FutureSchema) return;
-            int seed;
-            if (string.IsNullOrWhiteSpace(FixedSeedInput.text)) seed = visualPreview == CityVisualPreview.None
-                ? BitConverter.ToInt32(Guid.NewGuid().ToByteArray(), 0) : 0;
-            else if (!int.TryParse(FixedSeedInput.text, NumberStyles.Integer, CultureInfo.InvariantCulture, out seed))
-            {
-                streetError = "Введите целое число от −2147483648 до 2147483647 или оставьте seed пустым.";
-                Refresh();
-                return;
-            }
+            if (!TryReadSeed(visualPreview != CityVisualPreview.None, out int seed)) return;
             var prefabs = Resources.Load<FixedEncounterPrefabs>(FixedEncounterPrefabs.ResourceName);
             var combat = Resources.Load<Stage4CombatAssets>(Stage4CombatAssets.ResourceName);
             if (prefabs == null || !prefabs.IsComplete || combat == null || !combat.IsComplete)
@@ -409,6 +403,39 @@ namespace Game.UI
                 Refresh();
             }
         }
+
+        private void StartRanchPreview()
+        {
+            if (!TryReadSeed(true, out int seed)) return;
+            try
+            {
+                RanchStage.Load();
+                var request = RunRequest.RanchPreview(RanchLayout.Plan(seed));
+                cityMapPanel.gameObject.SetActive(false);
+                streetError = "";
+                boundRun.StartRun(request);
+            }
+            catch (InvalidOperationException exception)
+            {
+                streetError = exception.Message;
+                Refresh();
+            }
+        }
+
+        private bool TryReadSeed(bool visualPreview, out int seed)
+        {
+            if (string.IsNullOrWhiteSpace(FixedSeedInput.text))
+            {
+                seed = visualPreview ? 0 : BitConverter.ToInt32(Guid.NewGuid().ToByteArray(), 0);
+                return true;
+            }
+            if (int.TryParse(FixedSeedInput.text, NumberStyles.Integer, CultureInfo.InvariantCulture, out seed)) return true;
+            cityMapPanel?.gameObject.SetActive(false);
+            streetError = "Введите целое число от −2147483648 до 2147483647 или оставьте seed пустым.";
+            Refresh();
+            return false;
+        }
+
         protected override string SecondaryLabel => Application.CanStreamedLevelBeLoaded(ScenePaths.Stage2CombatSandbox)
             && Application.CanStreamedLevelBeLoaded(ScenePaths.Stage2BossSandbox)
             ? "Stage 2: арена и полицейский" : null;

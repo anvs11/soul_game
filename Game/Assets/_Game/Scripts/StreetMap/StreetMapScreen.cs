@@ -23,6 +23,11 @@ namespace Game.StreetMap
         private readonly bool[] visited = new bool[5];
         private readonly HashSet<string> cleared = new HashSet<string>(StringComparer.Ordinal);
         public RoomController[] Rooms { get; private set; }
+        internal IReadOnlyList<StreetMapLayout.Room> MapRooms => run.CurrentRequest.IsRanchPreview
+            ? RanchLayout.Rooms : StreetMapLayout.Rooms;
+        internal IReadOnlyList<RectInt> MapCorridors => run.CurrentRequest.IsRanchPreview
+            ? RanchLayout.Corridors : StreetMapLayout.Corridors;
+        internal Rect MiniMapBounds => run.CurrentRequest.IsRanchPreview ? RanchLayout.CameraBounds : StreetMapLayout.CameraBounds;
         public int ClearedCount => cleared.Count;
         public FixedMapPortal Portal {get;private set;}
         public StreetMiniMap MiniMap {get;private set;}
@@ -42,6 +47,7 @@ namespace Game.StreetMap
         private Stage5PreviewController preview;
         private SewerEntryScreen sewerEntry;
         private SewerStage sewerStage;
+        private RanchStage ranchStage;
         private WeaponController sewerWeapon;
         private UnityEngine.UI.Button sewerRetry;
         private static Vector2 SewerHatch => StreetMapLayout.Rooms[4].Center + new Vector2(-5, -3);
@@ -88,7 +94,8 @@ namespace Game.StreetMap
                 RoomContours = new CityRoomContours(value.CitySegmentIndex, value.CurrentRequest.Seed);
                 RoomContours.AddBoundaries(transform);
             }
-            CreateRooms(value.RunId);
+            if (value.CurrentRequest.IsRanchPreview) CreateRanch(value.RunId);
+            else CreateRooms(value.RunId);
             MiniMap=gameObject.AddComponent<StreetMiniMap>();MiniMap.Initialize(this);
             var portal=new GameObject("FinalPortal");portal.transform.SetParent(transform,false);
             Portal=portal.AddComponent<FixedMapPortal>();Portal.Initialize(player.GetComponent<SpriteRenderer>().sprite);
@@ -126,7 +133,8 @@ namespace Game.StreetMap
             run.Changed += OnPhaseChanged;
             hud.Bind(player);
             string seed = value.CurrentRequest.FixedEncounter == null ? "Тестовый маршрут" : "Seed " + value.CurrentRequest.Seed;
-            hud.SetHint(value.IsInSewer ? value.CitySegmentId + " · Shift: кувырок · E: поиск / выход" : value.CurrentRequest.IsStage5City
+            hud.SetHint(value.CurrentRequest.IsRanchPreview ? "Ранчо · 5-1 · " + seed + " · E: подбор / выход" :
+                value.IsInSewer ? value.CitySegmentId + " · Shift: кувырок · E: поиск / выход" : value.CurrentRequest.IsStage5City
                 ? run.CitySegmentId + " · " + seed + " · Shift: кувырок · Esc: пауза"
                 : "1-1 · " + seed + " · WASD / Space / Q · Shift: кувырок · E: подбор / портал · Esc: пауза");
             UpdateRoomLabel();
@@ -138,11 +146,12 @@ namespace Game.StreetMap
             if (run == null || run.Phase != RunPhase.InArena || IsPaused || player.IsDead || heroCollider == null) return;
             if (sewerWeapon != null)
                 controls.SetPassageLabel(sewerWeapon.TorchReadyMode ? "Факел" : sewerWeapon.State.IsMelee ? "Нож" : "Огонь");
-            for (int index = 0; index < StreetMapLayout.Rooms.Count; index++)
+            var mapRooms = MapRooms;
+            for (int index = 0; index < mapRooms.Count; index++)
             {
-                if (!StreetMapLayout.ContainsHero(StreetMapLayout.Rooms[index], heroCollider.bounds)) continue;
-                bool roomChanged = CurrentRoomId != StreetMapLayout.Rooms[index].Id;
-                CurrentRoomId = StreetMapLayout.Rooms[index].Id;
+                if (!StreetMapLayout.ContainsHero(mapRooms[index], heroCollider.bounds)) continue;
+                bool roomChanged = CurrentRoomId != mapRooms[index].Id;
+                CurrentRoomId = mapRooms[index].Id;
                 if (!visited[index])
                 {
                     visited[index] = true;
@@ -153,6 +162,24 @@ namespace Game.StreetMap
                 if(lastStatus!=status){lastStatus=status;UpdateRoomLabel();}
                 return;
             }
+        }
+
+        private void CreateRanch(string runId)
+        {
+            ranchStage = RanchStage.Load();
+            var prefabs = Resources.Load<FixedEncounterPrefabs>(FixedEncounterPrefabs.ResourceName);
+            combatAssets = Resources.Load<Stage4CombatAssets>(Stage4CombatAssets.ResourceName);
+            if (prefabs == null || !prefabs.IsComplete || combatAssets == null || !combatAssets.IsComplete)
+                throw new InvalidOperationException("Missing Ranch encounters or supply prefabs.");
+            foreach (var root in gameObject.scene.GetRootGameObjects())
+            {
+                if (root.name.StartsWith("FixedStreetGeometry", StringComparison.Ordinal)) root.SetActive(false);
+                var follow = root.GetComponent<BoundedFollowCamera>();
+                if (follow != null) follow.Configure(player.transform, RanchLayout.CameraBounds);
+            }
+            var ranch = new RanchMapScene(transform, player.GetComponent<SpriteRenderer>().sprite);
+            Rooms = ranch.Build(runId, ActiveEncounter, player, registry, prefabs, ranchStage);
+            foreach (var room in Rooms) room.Cleared += OnRoomCleared;
         }
         private void CreateRooms(string runId)
         {
@@ -340,7 +367,11 @@ namespace Game.StreetMap
             if (run == null || room.RunId != run.RunId || !cleared.Add(room.RoomId)) return;
             preview?.CompleteRoom(room.RoomId);
             UpdateRoomLabel();
-            if (run.IsInSewer)
+            if (ranchStage != null)
+            {
+                if (room.RoomId == RanchLayout.PenId) Drop(room, PickupKind.Ammo, RanchLayout.AmmoPosition, ranchStage.Ammo);
+            }
+            else if (run.IsInSewer)
             {
                 int stage = run.CitySegmentIndex;
                 Vector2 center = StreetMapLayout.Rooms[Array.IndexOf(Rooms, room) + 1].Center;
@@ -363,8 +394,22 @@ namespace Game.StreetMap
                 }
             }
             RoomCleared?.Invoke(room.RunId,room.RoomId);
-            if (ClearedCount == 4 && preview?.HasPendingCheckpoint != true && Portal.TryOpen(player))
+            if (ClearedCount == Rooms.Length && preview?.HasPendingCheckpoint != true && TryOpenExit())
+            {
                 DressCityExit();
+                UpdateRoomLabel();
+            }
+        }
+
+        private bool TryOpenExit()
+        {
+            if (ranchStage == null) return Portal.TryOpen(player);
+            if (!Portal.IsOpen)
+            {
+                Portal.OpenAt(RanchLayout.ExitPosition);
+                Stage5PreviewController.WorldLabel(transform, RanchLayout.ExitPosition + Vector2.up, "В убежище · E");
+            }
+            return true;
         }
 
         private void DressCityExit()
@@ -428,10 +473,21 @@ namespace Game.StreetMap
                 nearest = pickup;
                 distance = range;
             }
-            return nearest != null && nearest.TryCollect(player) > 0;
+            if (nearest == null || nearest.TryCollect(player) <= 0) return false;
+            if (ranchStage != null) UpdateRoomLabel();
+            return true;
         }
         private void UpdateRoomLabel()
         {
+            if (ranchStage != null)
+            {
+                string ranchText = $"{RanchLayout.RoomLabel(CurrentRoomId)} · Встречи {ClearedCount}/{Rooms.Length}";
+                if (Portal != null && Portal.IsOpen) ranchText += "\nВернуться в убежище · E рядом с выходом";
+                else if (pickups.Exists(pickup => pickup != null && !pickup.IsConsumed))
+                    ranchText += "\nПатроны на дороге к амбару · E";
+                hud.SetEncounter(ranchText);
+                return;
+            }
             if (run.CurrentRequest.IsStage5City)
             {
                 var label = run.IsInSewer ? (CurrentRoomId == "elite" && run.IsLastCitySegment ? "Иловый затворник" : sewerStage.Section(run.CitySegmentIndex)) :
@@ -488,8 +544,8 @@ namespace Game.StreetMap
                 sewerEntry.Show(true);
                 return;
             }
-            if ((preview != null && preview.TryUseInteract()) || TryPickup() || ClearedCount != 4) return;
-            if(!Portal.TryOpen(player)){UpdateRoomLabel();return;}
+            if ((preview != null && preview.TryUseInteract()) || TryPickup() || ClearedCount != Rooms.Length) return;
+            if(!TryOpenExit()){UpdateRoomLabel();return;}
             DressCityExit();
             UpdateRoomLabel();
             if(Vector2.Distance(player.transform.position,Portal.transform.position)>1.5f)return;
