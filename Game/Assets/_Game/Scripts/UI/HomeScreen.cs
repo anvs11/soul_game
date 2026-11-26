@@ -38,12 +38,12 @@ namespace Game.UI
         protected override void OnBound(RunCoordinator value)
         { boundRun=value; outcome=value.LastOutcome; IsShowingResult=outcome.HasValue; diagnostic=value.CurrentRequest.IsStage2Diagnostic; stage2=value.CurrentRequest.IsStage2Route; fixedStreet=value.CurrentRequest.IsFixedStreet1_1; }
         protected override string Title => IsShowingResult
-            ? (boundRun.CurrentRequest.IsRanchPreview ? "Ранчо · 5-1: " + OutcomeLabel :
+            ? (boundRun.CurrentRequest.IsRanch ? "Ранчо · 5-1: " + OutcomeLabel :
                 boundRun.CurrentRequest.IsStage5City ? CityResultTitle : fixedStreet ? "1-1: " + OutcomeLabel : diagnostic ? "Stage 2: проверка завершена" : outcome==RunOutcome.Victory ? (stage2 ? "Stage 2: победа" : "Победа") : outcome==RunOutcome.Defeat ? "Поражение" : "Вылазка завершена") : "Убежище";
         private string CityResultTitle => outcome == RunOutcome.Defeat ? "Эвакуация в убежище" :
             outcome == RunOutcome.Victory ? (boundRun.CurrentRequest.VisualPreview != CityVisualPreview.None
                 ? "Проверочный маршрут завершён" : boundRun.CurrentRequest.IsFullCity ? "CITY завершён" : "Улица зачищена") : "Возвращение с улицы";
-        protected override string Description => IsShowingResult
+        protected override string Description => IsShowingResult && boundRun.CurrentRequest.IsRanch ? RanchResult() : IsShowingResult
             && (boundRun.CurrentRequest.IsStage5Preview || boundRun.CurrentRequest.IsStage5City) ? Stage5Result()
             : IsShowingResult ? (diagnostic ? "Диагностическая арена, без босса и наград. Итог: " + OutcomeLabel : "Попытка завершена. Награды на этом этапе не начисляются.")
             : "CITY · Улица, гипермаркет и высотка\nПройдите три района и эвакуируйтесь с крыши.";
@@ -183,15 +183,16 @@ namespace Game.UI
             Stage5PreviewView.Button("Начать маршрут CITY", cityMapPanel, Vector2.up * 230,
                 () => StartSeededStreet(false, true, true));
             bool ranch = boundRun.Stage5.Session.Snapshot.Profile.CompletedRegionIds.Contains("city");
-            Stage5PreviewView.Label("Районы", cityMapPanel, Vector2.up * 156, new Vector2(430, 70), 18).text =
-                "Улица → Гипермаркет → Высотка\n" + (ranch ? "Ранчо открыто · маршрут в разработке" : "Ранчо закрыто · завершите CITY");
+            Stage5PreviewView.Button("Ранчо · 5-1", cityMapPanel, Vector2.up * 175, () => StartRanch(false)).interactable = ranch;
+            Stage5PreviewView.Label("Доступ к ранчо", cityMapPanel, Vector2.up * 125, new Vector2(430, 25), 16).text =
+                ranch ? "Отдельная вылазка после CITY" : "Ранчо закрыто · завершите CITY";
             Stage5PreviewView.Label("Проверка районов", cityMapPanel, Vector2.up * 90, new Vector2(430, 28), 19).text =
                 "Визуальная проверка";
             AddPreview("Улица · 1-1 → 1-3", 37, CityVisualPreview.Street);
             AddPreview("Гипермаркет · 2-1", -19, CityVisualPreview.Market);
             AddPreview("Офис и лифт · 3-4 → 3-5", -75, CityVisualPreview.Office);
             AddPreview("Крыша и канализация · 3-5 → 4-5", -131, CityVisualPreview.Sewer);
-            Stage5PreviewView.Button("Проверка ранчо · 5-1", cityMapPanel, Vector2.down * 187, StartRanchPreview);
+            Stage5PreviewView.Button("Проверка ранчо · 5-1", cityMapPanel, Vector2.down * 187, () => StartRanch(true));
             Stage5PreviewView.Button("Закрыть", cityMapPanel, Vector2.down * 245, () => cityMapPanel.gameObject.SetActive(false));
 
             void AddPreview(string label, float y, CityVisualPreview mode)
@@ -247,6 +248,15 @@ namespace Game.UI
             var profile = Stage5PreviewProfile.For(boundRun);
             return $"Подтверждено за попытку: {profile.LastCrystals} кристаллов\n" +
                 $"Монеты при завершении: {profile.LastCoins} · баланс в убежище: {profile.Crystals} (макет)";
+        }
+
+        private string RanchResult()
+        {
+            var snapshot = boundRun.CityRuntime.Session.Snapshot;
+            int earned = snapshot.LastRun?.ConfirmedCrystalsEarned ?? 0;
+            if (boundRun.CurrentRequest.IsRanchPreview)
+                return $"Проверка ранчо · отдельный профиль\nКристаллы за попытку: {earned}";
+            return $"Подтверждено за попытку: {earned} кристаллов\nБаланс в убежище: {snapshot.Profile.ConfirmedCrystals}";
         }
 
         private void ShowCityProfile(Transform parent)
@@ -404,16 +414,22 @@ namespace Game.UI
             }
         }
 
-        private void StartRanchPreview()
+        private void StartRanch(bool preview)
         {
-            if (!TryReadSeed(true, out int seed)) return;
+            if (!TryReadSeed(preview, out int seed)) return;
             try
             {
                 RanchStage.Load();
-                var request = RunRequest.RanchPreview(RanchLayout.Plan(seed));
+                var plan = RanchLayout.Plan(seed);
                 cityMapPanel.gameObject.SetActive(false);
                 streetError = "";
-                boundRun.StartRun(request);
+                boundRun.StartRun(preview ? RunRequest.RanchPreview(plan) : RunRequest.Ranch(plan));
+                if (boundRun.Phase == RunPhase.Home)
+                {
+                    FixedSeedInput.text = seed.ToString(CultureInfo.InvariantCulture);
+                    streetError = boundRun.Error;
+                    Refresh();
+                }
             }
             catch (InvalidOperationException exception)
             {

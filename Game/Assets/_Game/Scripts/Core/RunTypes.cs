@@ -29,6 +29,7 @@ namespace Game.Core
         public bool IsStage5City { get; }
         public bool IsFullCity { get; }
         public bool IsRanchPreview { get; }
+        public bool IsRanch { get; }
         public CityVisualPreview VisualPreview { get; }
         internal int FirstCitySegment => VisualPreview switch
         { CityVisualPreview.Market => 5, CityVisualPreview.Office => 13, CityVisualPreview.Sewer => 14, _ => 0 };
@@ -40,7 +41,7 @@ namespace Game.Core
 
         public RunRequest(string arenaId, int seed, bool isStage2Route = false, EncounterPlan fixedEncounter = null,
             bool stage5Preview = false, bool stage5City = false, bool fullCity = false,
-            CityVisualPreview visualPreview = CityVisualPreview.None, bool ranchPreview = false)
+            CityVisualPreview visualPreview = CityVisualPreview.None, bool ranch = false, bool ranchPreview = false)
         {
             ArenaId = arenaId;
             Seed = seed;
@@ -50,6 +51,7 @@ namespace Game.Core
             IsStage5City = stage5City;
             IsFullCity = fullCity;
             IsRanchPreview = ranchPreview;
+            IsRanch = ranch || ranchPreview;
             VisualPreview = visualPreview;
         }
 
@@ -64,6 +66,9 @@ namespace Game.Core
 
         public static RunRequest RanchPreview(EncounterPlan plan) =>
             new RunRequest(ScenePaths.Stage4StreetMap, plan.Seed, fixedEncounter: plan, ranchPreview: true);
+
+        public static RunRequest Ranch(EncounterPlan plan) =>
+            new RunRequest(ScenePaths.Stage4StreetMap, plan.Seed, fixedEncounter: plan, ranch: true);
 
         public static RunRequest Stage5City(EncounterPlan plan, bool fullCity = false, CityVisualPreview preview = CityVisualPreview.None) =>
             new RunRequest(ScenePaths.Stage4StreetMap, plan.Seed, fixedEncounter: plan, stage5City: true,

@@ -6,6 +6,7 @@ using Game.Actors;
 using Game.AI;
 using Game.Combat;
 using Game.Core;
+using Game.Progression;
 using Game.StreetMap;
 using Game.UI;
 using NUnit.Framework;
@@ -59,6 +60,7 @@ namespace Game.Tests
             var home = Object.FindFirstObjectByType<HomeScreen>();
             home.FixedSeedInput.text = "41";
             ButtonWith("Карта города").onClick.Invoke();
+            Assert.That(ButtonWith("Ранчо · 5-1").interactable, Is.False);
             ButtonWith("Проверка ранчо · 5-1").onClick.Invoke();
             yield return Until(() => run.Phase == RunPhase.InArena, "Home → Ranch");
             screen = Object.FindFirstObjectByType<StreetMapScreen>();
@@ -149,6 +151,139 @@ namespace Game.Tests
             Assert.That(run.Stage5.Session.Snapshot.Profile.CompletedRegionIds, Is.Empty);
             Assert.That(!Directory.Exists(profile) || Directory.GetFiles(profile, "*.json").Length == 0, Is.True);
         }
+
+        [UnityTest]
+        public IEnumerator SelectedStarterAndDeathBeforeFirstClearDiscardPendingCrystals()
+        {
+            yield return StartSavedRanch();
+            Assert.That(screen.Player.ReadSnapshot().MagazineCapacity, Is.EqualTo(10));
+            Assert.That(screen.Player.ReadSnapshot().Magazine, Is.EqualTo(10));
+            var yard = screen.Rooms[0];
+            yield return Enter(yard, 17, 4);
+            var actor = yard.GetComponentsInChildren<MonoBehaviour>().First(item => item is IEnemyTarget);
+            Vector2 position = actor.transform.position;
+            actor.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(900, 1_000));
+            Move(position);
+            yield return Until(() => run.Stage5.Session.Snapshot.Run.PendingCrystals > 0, "pending crystals collected");
+            screen.Player.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(900, 1_000));
+            yield return Until(() => run.Phase == RunPhase.Home, "return after loss before clear");
+            Assert.That(run.LastOutcome, Is.EqualTo(RunOutcome.Defeat));
+            Assert.That(run.Stage5.Session.Snapshot.Profile.ConfirmedCrystals, Is.EqualTo(10));
+            Assert.That(run.Stage5.Session.Snapshot.Profile.CompletedRegionIds, Is.EqualTo(new[] { "city" }));
+        }
+
+        [UnityTest]
+        public IEnumerator DeathAfterClearOrLeavingReturnsToHomeWithConfirmedBalance()
+        {
+            yield return StartSavedRanch();
+            var yard = screen.Rooms[0];
+            yield return Enter(yard, 17, 4);
+            KillRequired(yard);
+            int confirmed = run.Stage5.Session.Snapshot.Profile.ConfirmedCrystals;
+            Assert.That(confirmed, Is.GreaterThan(10));
+            screen.Player.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(900, 1_000));
+            yield return Until(() => run.Phase == RunPhase.Home, "return after loss after clear");
+            Assert.That(run.LastOutcome, Is.EqualTo(RunOutcome.Defeat));
+            Assert.That(run.Stage5.Session.Snapshot.Profile.ConfirmedCrystals, Is.EqualTo(confirmed));
+
+            OpenSavedRanchMenu();
+            yield return FindRanchScreen();
+            screen.Leave();
+            yield return Until(() => run.Phase == RunPhase.Home, "leave ranch");
+            Assert.That(run.LastOutcome, Is.EqualTo(RunOutcome.Abandoned));
+            Assert.That(run.Stage5.Session.Snapshot.Profile.ConfirmedCrystals, Is.EqualTo(confirmed));
+        }
+
+        [UnityTest]
+        public IEnumerator FailedCheckpointKeepsGateClosedAndRetryingVictoryReturnsToHomeOnce()
+        {
+            yield return StartSavedRanch();
+            var yard = screen.Rooms[0];
+            yield return Enter(yard, 17, 4);
+            BlockSave("yard");
+            KillRequired(yard);
+            Assert.That(yard.Doors.All(door => door.IsClosed), Is.True);
+            Assert.That(screen.ClearedCount, Is.Zero);
+            Assert.That(run.Stage5.Session.Snapshot.Profile.ConfirmedCrystals, Is.EqualTo(10));
+            UnblockSave("yard");
+            ButtonWith("Повторить сохранение").onClick.Invoke();
+            Assert.That(screen.ClearedCount, Is.EqualTo(1));
+            Assert.That(yard.Doors.All(door => !door.IsClosed), Is.True);
+            Assert.That(run.Stage5.Session.Snapshot.Profile.ConfirmedCrystals, Is.GreaterThan(10));
+
+            var pen = screen.Rooms[1];
+            yield return Enter(pen, 43, 4);
+            KillRequired(pen);
+            var barn = screen.Rooms[2];
+            yield return Enter(barn, 72, 1);
+            KillRequired(barn);
+            Assert.That(screen.Portal.IsOpen, Is.True);
+            string runId = run.RunId;
+            BlockSave("finish");
+            Move(RanchLayout.ExitPosition);
+            screen.TryExit();
+            yield return Until(() => run.Stage5FinishBlocked, "finish write fails");
+            Assert.That(run.Phase, Is.EqualTo(RunPhase.InArena));
+            Assert.That(run.Stage5.Session.Snapshot.Profile.CompletedRegionIds, Is.EqualTo(new[] { "city" }));
+            UnblockSave("finish");
+            ButtonWith("Повторить сохранение").onClick.Invoke();
+            yield return Until(() => run.Phase == RunPhase.Home, "finish retry returns to Home");
+            Assert.That(run.LastOutcome, Is.EqualTo(RunOutcome.Victory));
+            var saved = new JsonSaveRepository(savedProfile).Load().Profile;
+            Assert.That(saved.completedRegionIds, Is.EqualTo(new[] { "city", "ranch" }));
+            Assert.That(saved.finishedRuns.Count(entry => entry.runId == runId), Is.EqualTo(1));
+            Assert.That(saved.checkpoints.Count(entry => entry.runId == runId), Is.EqualTo(3));
+        }
+
+        private string savedProfile;
+        private string StagingPath => Path.Combine(savedProfile, "profile.pending.json");
+
+        private IEnumerator StartSavedRanch()
+        {
+            savedProfile = Path.Combine(Application.dataPath, "..", "TestResults", "Saves", "ranch-ui-" + Guid.NewGuid().ToString("N"));
+            var repository = new JsonSaveRepository(savedProfile);
+            Assert.That(repository.TryCommit(0, new ProfileData
+            {
+                revision = 1, confirmedCrystals = 10, completedRegionIds = new[] { "city" },
+                unlockedIds = new[] { "pistol-city" }, selectedWeaponId = "pistol-city"
+            }), Is.EqualTo(SaveWriteStatus.Saved));
+            run.SetStage5Runtime(new Stage5Runtime(savedProfile));
+            OpenSavedRanchMenu();
+            yield return FindRanchScreen();
+            Assert.That(run.CurrentRequest.IsRanch && !run.CurrentRequest.IsRanchPreview, Is.True);
+        }
+
+        private void OpenSavedRanchMenu()
+        {
+            var home = Object.FindFirstObjectByType<HomeScreen>();
+            if (home.IsShowingResult) home.PrimaryButton.onClick.Invoke();
+            home.FixedSeedInput.text = "41";
+            ButtonWith("Карта города").onClick.Invoke();
+            var launch = ButtonWith("Ранчо · 5-1");
+            Assert.That(launch.interactable, Is.True);
+            launch.onClick.Invoke();
+        }
+
+        private IEnumerator FindRanchScreen()
+        {
+            yield return Until(() => run.Phase == RunPhase.InArena, "saved profile opens Ranch");
+            screen = Object.FindFirstObjectByType<StreetMapScreen>();
+            if (screen.IsPaused) screen.Resume();
+        }
+
+        private IEnumerator Enter(RoomController room, float x, int minimum)
+        {
+            Move(new Vector2(x, 0));
+            yield return Until(() => room.State.AliveCount >= minimum, room.RoomId + " spawns");
+        }
+
+        private void BlockSave(string tag)
+        {
+            if (File.Exists(StagingPath)) File.Move(StagingPath, StagingPath + "-file-" + tag);
+            Directory.CreateDirectory(StagingPath);
+        }
+
+        private void UnblockSave(string tag) => Directory.Move(StagingPath, StagingPath + "-directory-" + tag);
 
         private void Move(Vector2 location)
         {

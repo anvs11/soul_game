@@ -23,6 +23,8 @@ namespace Game.Core
         private string startId;
         private int startSeed;
         private bool startFullCity;
+        private string ranchStartId;
+        private int ranchStartSeed;
         private string purchaseId;
         private string selectionId;
         private string selectionWeapon;
@@ -36,12 +38,17 @@ namespace Game.Core
         }
 
         private Stage5Runtime(CityProgressionSession session) => this.session = session;
-        internal static Stage5Runtime ForVisualPreview() => new Stage5Runtime(
-            new CityProgressionSession(() => Time.timeAsDouble, new PreviewSave()));
+        internal static Stage5Runtime ForVisualPreview(bool ranch = false) => new Stage5Runtime(
+            new CityProgressionSession(() => Time.timeAsDouble, new PreviewSave(ranch ? new ProfileData
+            {
+                revision = 1,
+                completedRegionIds = new[] { "city" }
+            } : null)));
 
         private sealed class PreviewSave : ISaveRepository
         {
             private ProfileData profile;
+            public PreviewSave(ProfileData profile) => this.profile = profile;
             public SaveLoadResult Load() => profile == null ? new SaveLoadResult(SaveLoadStatus.Missing) :
                 new SaveLoadResult(SaveLoadStatus.Ready, profile.Copy());
 
@@ -86,6 +93,19 @@ namespace Game.Core
         internal ProgressionResult Enter(string id, string segment) =>
             Session.EnterStage(new ProgressionCommandKey(id, "enter/" + segment), segment);
 
+        internal ProgressionResult StartRanch(int seed, out string id)
+        {
+            if (ranchStartId == null || ranchStartSeed != seed)
+            {
+                ranchStartId = Guid.NewGuid().ToString("N");
+                ranchStartSeed = seed;
+            }
+            id = ranchStartId;
+            var result = Session.StartRanch(new ProgressionCommandKey(id, "start"), seed);
+            if (result.Status != ProgressionStatus.RetryableFailure) ranchStartId = null;
+            return result;
+        }
+
         internal ProgressionResult Finish(string id, RunOutcome outcome) =>
             Session.FinishRun(new ProgressionCommandKey(id, "finish"), outcome);
 
@@ -102,7 +122,7 @@ namespace Game.Core
             session = Open(directory + "-separate");
             separateProfile = true;
             replayTutorial = false;
-            startId = purchaseId = selectionId = null;
+            startId = ranchStartId = purchaseId = selectionId = null;
         }
 
         internal ProgressionResult SelectStarter(string weaponId)
@@ -139,6 +159,7 @@ namespace Game.Core
             ProgressionFailure.ProfileIncompatible => "Профиль создан более новой версией. Откройте отдельный профиль.",
             ProgressionFailure.InsufficientCoins => "Не хватает монет",
             ProgressionFailure.InsufficientCrystals => "Не хватает кристаллов",
+            ProgressionFailure.RegionLocked => "Ранчо откроется после победы в CITY.",
             ProgressionFailure.ResourceFull => "Ресурс уже полон",
             ProgressionFailure.IncompatibleWeapon => "Возьмите оружие, для которого заказано усиление",
             _ => $"Действие недоступно ({failure})"

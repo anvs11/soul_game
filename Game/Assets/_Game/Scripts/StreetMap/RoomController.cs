@@ -25,6 +25,7 @@ namespace Game.StreetMap
         public IReadOnlyList<DoorController> Doors => doors;
         public event Action<RoomController> Cleared;
         internal Func<bool> CanBeginEncounter { get; set; }
+        internal Func<RoomController, bool> CanPublishClear { get; set; }
         public event Action<RoomController, string, string, Vector2> EnemyDefeated;
 
         public void Configure(string runId, EncounterRoom description, RoomPlan plan, PlayerCombatFacade player, TargetRegistry registry, MonoBehaviour[] actors, DoorController[] gates, Stage4CombatAssets combatAssets = null)
@@ -199,9 +200,10 @@ namespace Game.StreetMap
             if (State == null) return 0;
             int count=State.CancelUnmaterializedSummons(ownerSpawnId); PublishClear(); return count;
         }
-        private void PublishClear()
+        internal void PublishClear()
         {
             if (clearPublished || State.Phase != RoomPhase.Cleared) return;
+            if (CanPublishClear?.Invoke(this) == false) return;
             clearPublished=true;
             foreach (var door in doors) door.SetClosed(false);
             Cleared?.Invoke(this);

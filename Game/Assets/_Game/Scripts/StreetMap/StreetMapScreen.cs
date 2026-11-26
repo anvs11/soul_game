@@ -23,11 +23,11 @@ namespace Game.StreetMap
         private readonly bool[] visited = new bool[5];
         private readonly HashSet<string> cleared = new HashSet<string>(StringComparer.Ordinal);
         public RoomController[] Rooms { get; private set; }
-        internal IReadOnlyList<StreetMapLayout.Room> MapRooms => run.CurrentRequest.IsRanchPreview
+        internal IReadOnlyList<StreetMapLayout.Room> MapRooms => ranchStage != null
             ? RanchLayout.Rooms : StreetMapLayout.Rooms;
-        internal IReadOnlyList<RectInt> MapCorridors => run.CurrentRequest.IsRanchPreview
+        internal IReadOnlyList<RectInt> MapCorridors => ranchStage != null
             ? RanchLayout.Corridors : StreetMapLayout.Corridors;
-        internal Rect MiniMapBounds => run.CurrentRequest.IsRanchPreview ? RanchLayout.CameraBounds : StreetMapLayout.CameraBounds;
+        internal Rect MiniMapBounds => ranchStage != null ? RanchLayout.CameraBounds : StreetMapLayout.CameraBounds;
         public int ClearedCount => cleared.Count;
         public FixedMapPortal Portal {get;private set;}
         public StreetMiniMap MiniMap {get;private set;}
@@ -48,6 +48,8 @@ namespace Game.StreetMap
         private SewerEntryScreen sewerEntry;
         private SewerStage sewerStage;
         private RanchStage ranchStage;
+        private RanchRunProgress ranchProgress;
+        private UnityEngine.UI.Button ranchRetry;
         private WeaponController sewerWeapon;
         private UnityEngine.UI.Button sewerRetry;
         private static Vector2 SewerHatch => StreetMapLayout.Rooms[4].Center + new Vector2(-5, -3);
@@ -94,7 +96,7 @@ namespace Game.StreetMap
                 RoomContours = new CityRoomContours(value.CitySegmentIndex, value.CurrentRequest.Seed);
                 RoomContours.AddBoundaries(transform);
             }
-            if (value.CurrentRequest.IsRanchPreview) CreateRanch(value.RunId);
+            if (value.CurrentRequest.IsRanch) CreateRanch(value.RunId);
             else CreateRooms(value.RunId);
             MiniMap=gameObject.AddComponent<StreetMiniMap>();MiniMap.Initialize(this);
             var portal=new GameObject("FinalPortal");portal.transform.SetParent(transform,false);
@@ -103,6 +105,12 @@ namespace Game.StreetMap
             controls = GetComponent<BattleControls>() ?? gameObject.AddComponent<BattleControls>();
             bool stage5 = !value.IsInSewer && (value.CurrentRequest.IsStage5Preview || value.CurrentRequest.IsStage5City);
             controls.Initialize(TogglePause, Resume, Leave, enableDodge: true, enableNpc: stage5);
+            if (value.CurrentRequest.IsRanch)
+            {
+                ranchRetry = Stage5PreviewView.Button("Повторить сохранение", controls.SafeRoot, Vector2.zero, RetryRanchSave);
+                ranchRetry.gameObject.SetActive(false);
+                ranchProgress = new RanchRunProgress(value, player, Rooms, transform, UpdateRoomLabel);
+            }
             if (value.IsInSewer) BuildSewer();
             if (stage5)
             {
@@ -133,7 +141,7 @@ namespace Game.StreetMap
             run.Changed += OnPhaseChanged;
             hud.Bind(player);
             string seed = value.CurrentRequest.FixedEncounter == null ? "Тестовый маршрут" : "Seed " + value.CurrentRequest.Seed;
-            hud.SetHint(value.CurrentRequest.IsRanchPreview ? "Ранчо · 5-1 · " + seed + " · E: подбор / выход" :
+            hud.SetHint(value.CurrentRequest.IsRanch ? "Ранчо · 5-1 · " + seed + " · E: подбор / выход" :
                 value.IsInSewer ? value.CitySegmentId + " · Shift: кувырок · E: поиск / выход" : value.CurrentRequest.IsStage5City
                 ? run.CitySegmentId + " · " + seed + " · Shift: кувырок · Esc: пауза"
                 : "1-1 · " + seed + " · WASD / Space / Q · Shift: кувырок · E: подбор / портал · Esc: пауза");
@@ -144,6 +152,8 @@ namespace Game.StreetMap
         private void Update()
         {
             if (run == null || run.Phase != RunPhase.InArena || IsPaused || player.IsDead || heroCollider == null) return;
+            if (ranchProgress != null && run.Stage5FinishBlocked) return;
+            ranchProgress?.CollectNearbyCurrency();
             if (sewerWeapon != null)
                 controls.SetPassageLabel(sewerWeapon.TorchReadyMode ? "Факел" : sewerWeapon.State.IsMelee ? "Нож" : "Огонь");
             var mapRooms = MapRooms;
@@ -482,9 +492,15 @@ namespace Game.StreetMap
             if (ranchStage != null)
             {
                 string ranchText = $"{RanchLayout.RoomLabel(CurrentRoomId)} · Встречи {ClearedCount}/{Rooms.Length}";
+                var snapshot = ranchProgress?.Snapshot;
+                if (snapshot != null)
+                    ranchText += $"\nПодтверждено {snapshot.Profile.ConfirmedCrystals} · Ожидает {snapshot.Run?.PendingCrystals ?? 0} · Монеты {snapshot.Run?.Coins ?? 0}";
                 if (Portal != null && Portal.IsOpen) ranchText += "\nВернуться в убежище · E рядом с выходом";
                 else if (pickups.Exists(pickup => pickup != null && !pickup.IsConsumed))
                     ranchText += "\nПатроны на дороге к амбару · E";
+                if (!string.IsNullOrEmpty(ranchProgress?.Notice)) ranchText += "\n" + ranchProgress.Notice;
+                if (run.Stage5FinishBlocked) ranchText += "\n" + run.Error;
+                UpdateRanchRetry();
                 hud.SetEncounter(ranchText);
                 return;
             }
@@ -536,6 +552,7 @@ namespace Game.StreetMap
         public void TryExit()
         {
             if(run==null || run.Phase!=RunPhase.InArena || IsPaused || player.IsDead || sewerEntry?.IsOpen == true || run.Stage5FinishBlocked)return;
+            if (ranchProgress?.HasPendingSave == true) { RetryRanchSave(); return; }
             if (preview?.RetryCheckpoint() == true) return;
             if (sewerEntry != null && Vector2.Distance(player.transform.position, SewerHatch) <= 1.5f)
             {
@@ -544,7 +561,8 @@ namespace Game.StreetMap
                 sewerEntry.Show(true);
                 return;
             }
-            if ((preview != null && preview.TryUseInteract()) || TryPickup() || ClearedCount != Rooms.Length) return;
+            if ((preview != null && preview.TryUseInteract()) || TryPickup() || ranchProgress?.TryCollectAmmo() == true ||
+                ClearedCount != Rooms.Length) return;
             if(!TryOpenExit()){UpdateRoomLabel();return;}
             DressCityExit();
             UpdateRoomLabel();
@@ -566,6 +584,20 @@ namespace Game.StreetMap
             sewerEntry.Show(false);
             Time.timeScale = 1;
         }
+
+        private void RetryRanchSave()
+        {
+            if (run == null || run.Phase != RunPhase.InArena || IsPaused) return;
+            if (run.Stage5FinishBlocked) run.RetryStage5Finish();
+            else ranchProgress?.RetryCheckpoint();
+        }
+
+        private void UpdateRanchRetry()
+        {
+            if (ranchRetry != null)
+                ranchRetry.gameObject.SetActive(run.Phase == RunPhase.InArena && !IsPaused &&
+                    (run.Stage5FinishBlocked || ranchProgress?.HasPendingSave == true));
+        }
         private void CancelRooms()
         { if (Rooms!=null) foreach (var room in Rooms) if (room!=null) room.Cancel(); }
         private void OnPlayerDied() { CancelRooms(); run?.FinishRun(RunOutcome.Defeat); }
@@ -574,11 +606,13 @@ namespace Game.StreetMap
         {
             if (run == null || run.Phase != RunPhase.InArena || player.IsDead || sewerEntry?.IsOpen == true || run.Stage5FinishBlocked) return;
             IsPaused = true; controls.SetPaused(true); Time.timeScale = 0;
+            UpdateRanchRetry();
         }
         public void Resume()
         {
             if (!IsPaused || run == null || run.Phase != RunPhase.InArena || player.IsDead) return;
             controls.SetPaused(false); IsPaused = false; Time.timeScale = 1;
+            UpdateRanchRetry();
         }
         public void Leave()
         {
@@ -592,8 +626,10 @@ namespace Game.StreetMap
         private void OnPhaseChanged()
         {
             if (sewerRetry != null) sewerRetry.gameObject.SetActive(run.Stage5FinishBlocked);
+            UpdateRanchRetry();
             if (run.Stage5FinishBlocked && run.Phase == RunPhase.InArena)
             {
+                if (ranchProgress != null) UpdateRoomLabel();
                 player.SetControlsEnabled(false);
                 controls.ClearHeld();
                 Time.timeScale = 0;
@@ -617,6 +653,8 @@ namespace Game.StreetMap
         private void DetachCombat()
         {
             controls?.ClearHeld(); IsPaused = false; Time.timeScale = 1;
+            ranchProgress?.Dispose();
+            ranchProgress = null;
             if (run != null) run.Changed -= OnPhaseChanged;
             if (Rooms!=null) foreach (var room in Rooms) if (room!=null) { room.Cleared-=OnRoomCleared; room.Cancel(); }
             if (player != null)

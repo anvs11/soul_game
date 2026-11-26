@@ -10,11 +10,11 @@ namespace Game.StreetMap
 {
     public static class RanchLayout
     {
-        public const string SegmentId = "ranch/5-1";
+        public const string SegmentId = RanchProgression.SegmentId;
         public const string EntryId = "entry";
-        public const string YardId = "yard";
-        public const string PenId = "pen";
-        public const string BarnId = "barn";
+        public const string YardId = RanchProgression.YardId;
+        public const string PenId = RanchProgression.PenId;
+        public const string BarnId = RanchProgression.BarnId;
         public const float SpawnClearance = .65f;
         public const int PassageWidth = 4;
         internal const float WallWidth = .44f;

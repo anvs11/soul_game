@@ -95,7 +95,16 @@ namespace Game.Core
             string id = null;
             CityRegionRoute cityRoute = null;
             Stage5Runtime previewRuntime = null;
-            if (request.IsStage5City)
+            var failure = ProgressionFailure.None;
+            if (request.IsRanch)
+            {
+                if (request.IsRanchPreview) previewRuntime = Stage5Runtime.ForVisualPreview(ranch: true);
+                var runtime = previewRuntime ?? Stage5;
+                if (runtime == null || request.FixedEncounter?.MapId != RanchProgression.SegmentId)
+                    throw new InvalidOperationException("Ranch requires a profile and encounter plan.");
+                failure = runtime.StartRanch(request.Seed, out id).Failure;
+            }
+            else if (request.IsStage5City)
             {
                 if (Stage5 == null || request.FixedEncounter == null) throw new InvalidOperationException("City requires a profile and encounter plan.");
                 if (request.IsFullCity) cityRoute = new CityRegionRoute(request.FixedEncounter);
@@ -105,12 +114,13 @@ namespace Game.Core
                 var result = runtime.Start(request.Seed, request.IsFullCity, out id, previewStage);
                 for (int index = 1; result.Failure == ProgressionFailure.None && index <= request.FirstCitySegment; ++index)
                     result = runtime.Enter(id, CityRegionRoute.IdAt(index));
-                if (result.Failure != ProgressionFailure.None)
-                {
-                    Error = Stage5Runtime.Describe(result.Failure);
-                    Changed?.Invoke();
-                    return;
-                }
+                failure = result.Failure;
+            }
+            if (failure != ProgressionFailure.None)
+            {
+                Error = Stage5Runtime.Describe(failure);
+                Changed?.Invoke();
+                return;
             }
             StreetRoute = request.IsStreetRun ? requestedStreetRoute ?? Game.Street.StreetRoute.Fixed() : null;
             StreetGeneration = request.IsStreetRun ? requestedGeneration : null;
@@ -183,7 +193,7 @@ namespace Game.Core
                         SewerReward = repeat ? SewerEntryService.RepeatCrystals : 0;
                     }
                 }
-                else if (CurrentRequest.IsStage5City && !SaveStage5Finish(pendingOutcome.Value)) return;
+                else if ((CurrentRequest.IsStage5City || CurrentRequest.IsRanch) && !SaveStage5Finish(pendingOutcome.Value)) return;
                 LastOutcome = pendingOutcome;
                 pendingOutcome = null;
                 pendingAdvance = null;
@@ -254,7 +264,7 @@ namespace Game.Core
         public void RetryHome()
         {
             if (disposed || Phase != RunPhase.Faulted) return;
-            if (CurrentRequest.IsStage5City && CityRuntime.Session.Snapshot.Run != null &&
+            if ((CurrentRequest.IsStage5City || CurrentRequest.IsRanch) && CityRuntime.Session.Snapshot.Run != null &&
                 !SaveStage5Finish(RunOutcome.Abandoned)) return;
             pendingOutcome = null;
             pendingAdvance = null;
