@@ -54,18 +54,27 @@ namespace Game.Progression
             IReadOnlyList<ProgressionTransitionPoint> transitionPoints) => StartRun(key, seed, transitionPoints, false);
 
         internal ProgressionResult StartRun(ProgressionCommandKey key, int seed,
-            IReadOnlyList<ProgressionTransitionPoint> transitionPoints, bool fullCity)
+            IReadOnlyList<ProgressionTransitionPoint> transitionPoints, bool fullCity) =>
+            StartAttempt(key, seed, transitionPoints, fullCity ? AttemptRoute.City : AttemptRoute.Street);
+
+        public ProgressionResult StartRanch(ProgressionCommandKey key, int seed) =>
+            StartAttempt(key, seed, Array.Empty<ProgressionTransitionPoint>(), AttemptRoute.Ranch);
+
+        private ProgressionResult StartAttempt(ProgressionCommandKey key, int seed,
+            IReadOnlyList<ProgressionTransitionPoint> transitionPoints, AttemptRoute route)
         {
             var start = new StartRequest(seed,
-                transitionPoints?.OrderBy(point => point.PointId, StringComparer.Ordinal).ToArray(), fullCity);
-            return Execute(key, nameof(StartRun), start, () =>
+                transitionPoints?.OrderBy(point => point.PointId, StringComparer.Ordinal).ToArray(), route);
+            return Execute(key, route == AttemptRoute.Ranch ? nameof(StartRanch) : nameof(StartRun), start, () =>
             {
                 var unavailable = EnsureWritableProfile();
                 if (unavailable.HasValue) return unavailable.Value;
                 if (run != null || profile.activeRun.Exists || profile.finishedRuns.Any(entry => entry.runId == key.RunId))
                     return Reject(ProgressionFailure.WrongPhase);
+                if (route == AttemptRoute.Ranch && !profile.completedRegionIds.Contains("city"))
+                    return Reject(ProgressionFailure.RegionLocked);
                 if (!ValidPoints(start.Points)) return Reject(ProgressionFailure.InvalidRequest);
-                var nextRun = new RunState(key.RunId, seed, CityEconomy.PlanNpcs(seed, start.Points), profile.selectedWeaponId, fullCity);
+                var nextRun = new RunState(key.RunId, seed, CityEconomy.PlanNpcs(seed, start.Points), profile.selectedWeaponId, route);
                 var next = profile.Copy();
                 next.activeRun = new ActiveRunData { runId = key.RunId, seed = seed, stageId = nextRun.StageId };
                 var written = CommitProfile(next);
@@ -111,8 +120,11 @@ namespace Game.Progression
                 }
                 if (run?.Id != key.RunId || profile.activeRun.runId != key.RunId)
                     return Reject(ProgressionFailure.WrongPhase);
+                bool victory = outcome == RunOutcome.Victory && run.Stage == run.Route.Count - 1;
+                if (victory && run.IsRanch && (!run.Rooms.TryGetValue(2, out var barn) || !barn.Cleared))
+                    return Reject(ProgressionFailure.WrongPhase);
                 var committed = CommitProfile(EndProfileRun(run.Id, outcome,
-                    outcome == RunOutcome.Victory && run.Stage == run.Route.Count - 1));
+                    victory ? (run.IsRanch ? RanchProgression.RegionId : "city") : null));
                 if (committed.Status != ProgressionStatus.Applied) return committed;
                 FinishLocally(outcome);
                 return Applied;
@@ -281,12 +293,18 @@ namespace Game.Progression
             run.Rooms.TryGetValue(checkpoint.Index, out room);
             if (checkpoint.Index < 0 || !Id(checkpoint.RoomId) || !Id(checkpoint.StageId))
                 return ProgressionFailure.InvalidRequest;
+            if (checkpoint.StageId == RanchProgression.SegmentId && !RanchProgression.IsCheckpoint(checkpoint))
+                return ProgressionFailure.InvalidRequest;
             if (room != null && !room.Checkpoint.Equals(checkpoint))
                 return ProgressionFailure.Conflict;
             if (room == null && run.Rooms.Values.Any(existing => existing.Checkpoint.StageId == checkpoint.StageId &&
                 existing.Checkpoint.RoomId == checkpoint.RoomId))
                 return ProgressionFailure.Conflict;
-            return checkpoint.StageId == run.StageId ? ProgressionFailure.None : ProgressionFailure.WrongPhase;
+            if (checkpoint.StageId != run.StageId) return ProgressionFailure.WrongPhase;
+            if (run.IsRanch && checkpoint.Index > 0 &&
+                (!run.Rooms.TryGetValue(checkpoint.Index - 1, out var previous) || !previous.Cleared))
+                return ProgressionFailure.WrongPhase;
+            return ProgressionFailure.None;
         }
 
         private RoomState AddRoom(ProgressionCheckpoint checkpoint)
@@ -328,13 +346,17 @@ namespace Game.Progression
             public RoomState(ProgressionCheckpoint checkpoint) => Checkpoint = checkpoint;
         }
 
+        private enum AttemptRoute { Street, City, Ranch }
+
         private sealed class RunState
         {
+            private static readonly IReadOnlyList<string> RanchRoute = Array.AsReadOnly(new[] { RanchProgression.SegmentId });
             public string Id { get; }
             public int Seed { get; }
             public int Stage;
             public IReadOnlyList<string> Route { get; }
             public string StageId => Route[Stage];
+            public bool IsRanch => Route == RanchRoute;
             public int Coins;
             public bool MarketRegisterSearched;
             public string StartingWeaponId { get; }
@@ -348,9 +370,14 @@ namespace Game.Progression
             public readonly HashSet<string> UsedSupplies = new(StringComparer.Ordinal);
             public readonly Dictionary<string, ProgressionModuleKind> Modules = new(StringComparer.Ordinal);
 
-            public RunState(string id, int seed, List<ProgressionNpcSnapshot> npcs, string startingWeaponId, bool fullCity)
+            public RunState(string id, int seed, List<ProgressionNpcSnapshot> npcs, string startingWeaponId, AttemptRoute route)
             {
-                Route = fullCity ? CityEconomy.FullRoute : CityEconomy.Stages;
+                Route = route switch
+                {
+                    AttemptRoute.City => CityEconomy.FullRoute,
+                    AttemptRoute.Ranch => RanchRoute,
+                    _ => CityEconomy.Stages
+                };
                 Id = id;
                 Seed = seed;
                 Npcs = npcs;

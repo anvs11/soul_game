@@ -35,7 +35,7 @@ namespace Game.Progression
                 checkpoints == null || finishedRuns == null || homePurchases == null)
                 return false;
 
-            if (activeRun.Exists && (!IsId(activeRun.runId) || !CityEconomy.FullRoute.Contains(activeRun.stageId)))
+            if (activeRun.Exists && (!IsId(activeRun.runId) || !IsKnownSegment(activeRun.stageId)))
                 return false;
             var runIds = new HashSet<string>(StringComparer.Ordinal);
             if (activeRun.Exists) runIds.Add(activeRun.runId);
@@ -47,7 +47,9 @@ namespace Game.Progression
             var rooms = new HashSet<(string, string, string)>();
             foreach (var entry in checkpoints)
                 if (!IsId(entry.runId) || !runIds.Contains(entry.runId) || entry.checkpointIndex < 0 ||
-                    !CityEconomy.FullRoute.Contains(entry.stageId) || !IsId(entry.roomId) || entry.crystals < 0 ||
+                    !IsKnownSegment(entry.stageId) || !IsId(entry.roomId) || entry.crystals < 0 ||
+                    (entry.stageId == RanchProgression.SegmentId &&
+                        (!RanchProgression.TryCheckpoint(entry.roomId, out var ranchCheckpoint) || ranchCheckpoint.Index != entry.checkpointIndex)) ||
                     !checkpointKeys.Add((entry.runId, entry.checkpointIndex)) ||
                     !rooms.Add((entry.runId, entry.stageId, entry.roomId)))
                     return false;
@@ -60,6 +62,7 @@ namespace Game.Progression
         private static bool UniqueIds(string[] values) => values != null && values.All(IsId) &&
             new HashSet<string>(values, StringComparer.Ordinal).Count == values.Length;
         private static bool IsId(string value) => !string.IsNullOrWhiteSpace(value);
+        private static bool IsKnownSegment(string value) => value == RanchProgression.SegmentId || CityEconomy.FullRoute.Contains(value);
     }
 
     [Serializable]

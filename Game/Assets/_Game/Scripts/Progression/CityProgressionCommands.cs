@@ -54,7 +54,7 @@ namespace Game.Progression
         private static bool SamePayload(object first, object second)
         {
             if (first is StartRequest a && second is StartRequest b)
-                return a.Seed == b.Seed && a.FullCity == b.FullCity && (a.Points == null || b.Points == null
+                return a.Seed == b.Seed && a.Route == b.Route && (a.Points == null || b.Points == null
                     ? a.Points == b.Points
                     : a.Points.SequenceEqual(b.Points));
             return Equals(first, second);
@@ -64,13 +64,13 @@ namespace Game.Progression
         {
             public readonly int Seed;
             public readonly ProgressionTransitionPoint[] Points;
-            public readonly bool FullCity;
+            public readonly AttemptRoute Route;
 
-            public StartRequest(int seed, ProgressionTransitionPoint[] points, bool fullCity)
+            public StartRequest(int seed, ProgressionTransitionPoint[] points, AttemptRoute route)
             {
                 Seed = seed;
                 Points = points;
-                FullCity = fullCity;
+                Route = route;
             }
         }
 

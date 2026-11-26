@@ -117,7 +117,7 @@ namespace Game.Progression
             }
 
             string id = profile.activeRun.runId;
-            var next = EndProfileRun(id, RunOutcome.Abandoned, completeCity: false);
+            var next = EndProfileRun(id, RunOutcome.Abandoned);
             var result = CommitProfile(next);
             if (result.Status != ProgressionStatus.Applied)
             {
@@ -156,13 +156,13 @@ namespace Game.Progression
             return Applied;
         }
 
-        private ProfileData EndProfileRun(string id, RunOutcome outcome, bool completeCity)
+        private ProfileData EndProfileRun(string id, RunOutcome outcome, string completedRegion = null)
         {
             var next = profile.Copy();
             next.activeRun = ActiveRunData.Empty;
             next.finishedRuns = next.finishedRuns.Append(new RunReceipt { runId = id, outcome = outcome }).ToArray();
-            if (completeCity && !next.completedRegionIds.Contains("city"))
-                next.completedRegionIds = next.completedRegionIds.Append("city").ToArray();
+            if (completedRegion != null && !next.completedRegionIds.Contains(completedRegion))
+                next.completedRegionIds = next.completedRegionIds.Append(completedRegion).ToArray();
             return next;
         }
 

@@ -91,7 +91,8 @@ namespace Game.Contracts
         SaveFailed,
         ProfileIncompatible,
         AlreadyPurchased,
-        OperationInProgress
+        OperationInProgress,
+        RegionLocked
     }
 
     public sealed class ProgressionResult
