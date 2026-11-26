@@ -6,6 +6,7 @@ namespace Game.StreetMap
     public sealed class FixedMapPortal : MonoBehaviour
     {
         private SpriteRenderer skin;
+        internal Vector2? ReservedPosition { get; set; }
         public bool IsOpen {get;private set;}
         public void Initialize(Sprite sprite)
         {skin=gameObject.AddComponent<SpriteRenderer>();skin.sprite=sprite;skin.color=Color.cyan;skin.sortingOrder=4;skin.enabled=false;}
@@ -20,6 +21,7 @@ namespace Game.StreetMap
             {
                 float angle=step*Mathf.PI/8;
                 var point=origin+new Vector2(Mathf.Cos(angle),Mathf.Sin(angle))*(2.5f+ring);
+                if (ReservedPosition.HasValue && (point - ReservedPosition.Value).sqrMagnitude < 3.2f * 3.2f) continue;
                 if(!Available(point,origin))continue;
                 transform.position=point;IsOpen=true;skin.enabled=true;return true;
             }

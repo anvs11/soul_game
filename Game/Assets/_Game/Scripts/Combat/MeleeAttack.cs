@@ -20,13 +20,20 @@ namespace Game.Combat
         {
             if (!isActiveAndEnabled || state == null || direction.sqrMagnitude < .000001f) return false;
             if (!state.TryMeleeAttack()) return false;
+            Swing(origin, direction, ownerActorId, faction, mask, attackId, Damage * state.ProgressionKnifeDamageMultiplier);
+            return true;
+        }
+
+        internal void Swing(Vector2 origin, Vector2 direction, int ownerActorId, CombatFaction faction,
+            LayerMask mask, long attackId, float damage)
+        {
             LastSwingTargetCount = 0;
             direction.Normalize();
             hitActors.Clear(); hitReceivers.Clear();
             var filter = new ContactFilter2D { useTriggers = false };
             filter.SetLayerMask(mask);
             Physics2D.OverlapCircle(origin, Radius, filter, candidates);
-            var packet = new DamagePacket(ownerActorId, Damage * state.ProgressionKnifeDamageMultiplier, attackId: attackId);
+            var packet = new DamagePacket(ownerActorId, damage, attackId: attackId);
             foreach (var collider in candidates)
             {
                 if (collider == null) continue;
@@ -45,7 +52,6 @@ namespace Game.Combat
                 receiver.ApplyDamage(in packet);
             }
             candidates.Clear(); obstacles.Clear(); hitActors.Clear(); hitReceivers.Clear();
-            return true;
         }
         private bool Blocked(Vector2 origin, Vector2 offset, float distance, DamageReceiver target,
             int owner, CombatFaction faction, ContactFilter2D filter)

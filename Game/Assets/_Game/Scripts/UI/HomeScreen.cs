@@ -178,18 +178,19 @@ namespace Game.UI
         {
             cityProfilePanel?.gameObject.SetActive(false);
             if (cityMapPanel != null) { cityMapPanel.gameObject.SetActive(true); return; }
-            cityMapPanel = CreateCityDialog("Карта города", parent, 506);
-            Stage5PreviewView.Button("Начать маршрут CITY", cityMapPanel, Vector2.up * 200,
+            cityMapPanel = CreateCityDialog("Карта города", parent, 565);
+            Stage5PreviewView.Button("Начать маршрут CITY", cityMapPanel, Vector2.up * 230,
                 () => StartSeededStreet(false, true, true));
             bool ranch = boundRun.Stage5.Session.Snapshot.Profile.CompletedRegionIds.Contains("city");
-            Stage5PreviewView.Label("Районы", cityMapPanel, Vector2.up * 129, new Vector2(430, 70), 18).text =
+            Stage5PreviewView.Label("Районы", cityMapPanel, Vector2.up * 156, new Vector2(430, 70), 18).text =
                 "Улица → Гипермаркет → Высотка\n" + (ranch ? "Ранчо открыто · маршрут в разработке" : "Ранчо закрыто · завершите CITY");
-            Stage5PreviewView.Label("Проверка районов", cityMapPanel, Vector2.up * 65, new Vector2(430, 28), 19).text =
+            Stage5PreviewView.Label("Проверка районов", cityMapPanel, Vector2.up * 90, new Vector2(430, 28), 19).text =
                 "Визуальная проверка";
-            AddPreview("Улица · 1-1 → 1-3", 8, CityVisualPreview.Street);
-            AddPreview("Гипермаркет · 2-1", -48, CityVisualPreview.Market);
-            AddPreview("Офис и лифт · 3-4 → 3-5", -104, CityVisualPreview.Office);
-            Stage5PreviewView.Button("Закрыть", cityMapPanel, Vector2.down * 190, () => cityMapPanel.gameObject.SetActive(false));
+            AddPreview("Улица · 1-1 → 1-3", 37, CityVisualPreview.Street);
+            AddPreview("Гипермаркет · 2-1", -19, CityVisualPreview.Market);
+            AddPreview("Офис и лифт · 3-4 → 3-5", -75, CityVisualPreview.Office);
+            AddPreview("Крыша и канализация · 3-5 → 4-5", -131, CityVisualPreview.Sewer);
+            Stage5PreviewView.Button("Закрыть", cityMapPanel, Vector2.down * 225, () => cityMapPanel.gameObject.SetActive(false));
 
             void AddPreview(string label, float y, CityVisualPreview mode)
             {
@@ -225,12 +226,20 @@ namespace Game.UI
             if (boundRun.CurrentRequest.IsStage5City)
             {
                 var snapshot = boundRun.CityRuntime.Session.Snapshot;
+                if (boundRun.IsInSewer)
+                {
+                    string resultSewer = outcome == RunOutcome.Victory
+                        ? boundRun.SewerReward > 0 ? $"+{boundRun.SewerReward} кристаллов скверны" : "Получен чертёж «Герметичный механизм»"
+                        : $"Канализация · участок {boundRun.CitySegmentId}";
+                    return resultSewer + (boundRun.CurrentRequest.VisualPreview == CityVisualPreview.Sewer
+                        ? "\nВизуальная проверка · отдельный профиль" : "\nПобеда CITY сохранена");
+                }
                 if (boundRun.CurrentRequest.VisualPreview != CityVisualPreview.None)
                     return $"Визуальная проверка · {boundRun.CitySegmentId}\nКристаллы в пробе: {snapshot.LastRun?.ConfirmedCrystalsEarned ?? 0}. Баланс убежища сохранён.";
                 string result = $"Подтверждено за попытку: {snapshot.LastRun?.ConfirmedCrystalsEarned ?? 0} кристаллов\n" +
                     $"Монеты при завершении: {snapshot.LastRun?.FinalCoins ?? 0} · баланс в убежище: {snapshot.Profile.ConfirmedCrystals}";
                 return boundRun.CurrentRequest.IsFullCity && outcome == RunOutcome.Victory
-                    ? result + "\nМашина ждёт у крыши. Ранчо открыто. Вход в канализацию закрыт."
+                    ? result + "\nЭвакуация с крыши. Ранчо открыто."
                     : result;
             }
             var profile = Stage5PreviewProfile.For(boundRun);
@@ -259,6 +268,8 @@ namespace Game.UI
                     ProgressionProfileState.Unavailable => "Хранилище профиля недоступно",
                     _ => profile.SelectedWeaponId == "pistol-city" ? "Выбран городской пистолет" : "Выбран обычный пистолет"
                 };
+                if (profile.UnlockedIds.Contains(Game.Progression.SewerEntryService.BlueprintId))
+                    state.text += "\nЧертёж «Герметичный механизм»";
                 var offer = profile.HomeOffers.Count > 0 ? profile.HomeOffers[0] : default;
                 buy.interactable = offer.OfferId != null || profile.State == ProgressionProfileState.IncompatibleSchema ||
                     profile.State == ProgressionProfileState.Unavailable;

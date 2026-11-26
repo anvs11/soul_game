@@ -40,6 +40,11 @@ namespace Game.StreetMap
         private readonly List<RoomPickup> pickups = new List<RoomPickup>();
         public bool IsCombatReady => combatAssets != null;
         private Stage5PreviewController preview;
+        private SewerEntryScreen sewerEntry;
+        private SewerStage sewerStage;
+        private WeaponController sewerWeapon;
+        private UnityEngine.UI.Button sewerRetry;
+        private static Vector2 SewerHatch => StreetMapLayout.Rooms[4].Center + new Vector2(-5, -3);
         private int boundCitySegment;
         private bool exitDressed;
         internal EncounterPlan ActiveEncounter => run.FullCityRoute?.PlanAt(run.CitySegmentIndex) ?? run.CurrentRequest.FixedEncounter;
@@ -87,9 +92,11 @@ namespace Game.StreetMap
             MiniMap=gameObject.AddComponent<StreetMiniMap>();MiniMap.Initialize(this);
             var portal=new GameObject("FinalPortal");portal.transform.SetParent(transform,false);
             Portal=portal.AddComponent<FixedMapPortal>();Portal.Initialize(player.GetComponent<SpriteRenderer>().sprite);
+            if (value.CanEnterSewer) Portal.ReservedPosition = SewerHatch;
             controls = GetComponent<BattleControls>() ?? gameObject.AddComponent<BattleControls>();
-            bool stage5 = value.CurrentRequest.IsStage5Preview || value.CurrentRequest.IsStage5City;
+            bool stage5 = !value.IsInSewer && (value.CurrentRequest.IsStage5Preview || value.CurrentRequest.IsStage5City);
             controls.Initialize(TogglePause, Resume, Leave, enableDodge: true, enableNpc: stage5);
+            if (value.IsInSewer) BuildSewer();
             if (stage5)
             {
                 preview = gameObject.AddComponent<Stage5PreviewController>();
@@ -119,7 +126,7 @@ namespace Game.StreetMap
             run.Changed += OnPhaseChanged;
             hud.Bind(player);
             string seed = value.CurrentRequest.FixedEncounter == null ? "Тестовый маршрут" : "Seed " + value.CurrentRequest.Seed;
-            hud.SetHint(value.CurrentRequest.IsStage5City
+            hud.SetHint(value.IsInSewer ? value.CitySegmentId + " · Shift: кувырок · E: поиск / выход" : value.CurrentRequest.IsStage5City
                 ? run.CitySegmentId + " · " + seed + " · Shift: кувырок · Esc: пауза"
                 : "1-1 · " + seed + " · WASD / Space / Q · Shift: кувырок · E: подбор / портал · Esc: пауза");
             UpdateRoomLabel();
@@ -129,6 +136,8 @@ namespace Game.StreetMap
         private void Update()
         {
             if (run == null || run.Phase != RunPhase.InArena || IsPaused || player.IsDead || heroCollider == null) return;
+            if (sewerWeapon != null)
+                controls.SetPassageLabel(sewerWeapon.TorchReadyMode ? "Факел" : sewerWeapon.State.IsMelee ? "Нож" : "Огонь");
             for (int index = 0; index < StreetMapLayout.Rooms.Count; index++)
             {
                 if (!StreetMapLayout.ContainsHero(StreetMapLayout.Rooms[index], heroCollider.bounds)) continue;
@@ -207,10 +216,10 @@ namespace Game.StreetMap
                 {
                     var actor = spawn.EnemyTypeId == EnemyTypes.HeavyBoss
                         ? CityHeavyBoss.Create(actorRoot.transform, sprite, player.GetComponent<ProjectilePool>().Template,
-                            CityRegionRoute.DistrictAt(run.CitySegmentIndex))
-                        : combatAssets.CreateElite(spawn.EnemyTypeId, actorRoot.transform);
-                    if (run.FullCityRoute != null && run.CitySegmentIndex >= 5 && actor is EliteEnemy eliteActor)
-                        eliteActor.EnableCoverNavigation();
+                            run.IsInSewer ? 3 : CityRegionRoute.DistrictAt(run.CitySegmentIndex))
+                        : run.IsInSewer ? prefabs.InstantiateActor(spawn.EnemyTypeId, actorRoot.transform)
+                            : combatAssets.CreateElite(spawn.EnemyTypeId, actorRoot.transform);
+                    EnableCoverRouting(actor);
                     actor.name = spawn.SpawnId;
                     actors.Add(actor);
                 }
@@ -260,13 +269,7 @@ namespace Game.StreetMap
                     if (run.FullCityRoute != null)
                     {
                         int district = CityRegionRoute.DistrictAt(run.CitySegmentIndex);
-                        if (district > 0)
-                        {
-                            var perception = actor.GetComponent<EnemyPerception>();
-                            if (perception == null && actor is SandboxEnemy)
-                                perception = actor.gameObject.AddComponent<EnemyPerception>();
-                            perception?.EnableCoverNavigation();
-                        }
+                        EnableCoverRouting(actor);
                         if (actor is ShootingEnemy shooter) shooter.MarketVolley = district == 1;
                         if (actor is JumpingEnemy jumper) jumper.FlankInBuilding = district == 2;
                     }
@@ -276,12 +279,77 @@ namespace Game.StreetMap
                 }
             return actors.ToArray();
         }
+
+        private void EnableCoverRouting(MonoBehaviour actor)
+        {
+            if (!run.IsInSewer && run.CitySegmentIndex < 5) return;
+            if (actor is EliteEnemy elite) elite.EnableCoverNavigation();
+            var perception = actor.GetComponent<EnemyPerception>();
+            if (perception == null && actor is SandboxEnemy)
+                perception = actor.gameObject.AddComponent<EnemyPerception>();
+            perception?.EnableCoverNavigation();
+        }
+
+        private void BuildSewer()
+        {
+            sewerStage = SewerStage.Load();
+            sewerWeapon = player.GetComponent<WeaponController>();
+            if (run.CityWeapon != CityFirearm.Pistol) sewerWeapon.EquipCityFamily(run.CityWeapon);
+            else if (run.SewerStarter == "pistol-city") sewerWeapon.EquipCityStarter();
+            sewerWeapon.LockSewerWeapon();
+            player.RestoreForEncounter(run.PlayerTransfer.Value);
+            controls.HideWeaponSwitch();
+            Feedback = gameObject.AddComponent<CityFeedback>();
+            Feedback.Bind(player);
+            sewerRetry = Stage5PreviewView.Button("Повторить сохранение", controls.SafeRoot, Vector2.zero, run.RetryStage5Finish);
+            sewerRetry.gameObject.SetActive(false);
+
+            var art = new GameObject("Туннели канализации").AddComponent<CityStreetArt>();
+            art.transform.SetParent(transform, false);
+            art.Build(RoomContours, 3);
+            var sprite = player.GetComponent<SpriteRenderer>().sprite;
+            var light = new GameObject("Свет факела").AddComponent<SewerLighting>();
+            light.transform.SetParent(transform, false);
+            light.Initialize(player.transform, sprite);
+
+            int segment = run.CitySegmentIndex;
+            Stage5PreviewController.WorldLabel(transform, StreetMapLayout.Entry + Vector2.up * 2.3f, sewerStage.Section(segment));
+            foreach (var room in run.FullCityRoute.MapAt(segment).Rooms)
+            {
+                if (room.RoomId == "entry") continue;
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    Vector2 offset = new Vector2(4.1f * side, (segment % 2 == 0 ? 2.8f : -2.8f) * side);
+                    Vector2 size = segment % 2 == 0 ? new Vector2(1.05f, 3.1f) : new Vector2(2.7f, 1.05f);
+                    Vector2 center = new Vector2(room.CenterX, room.CenterY) + offset;
+                    if (!CityDistrictDressing.HasClearance(room, offset, size) || RoomContours.Overlaps(center, size)) continue;
+                    var pipe = new GameObject("Труба и решётка") { layer = LayerMask.NameToLayer("World") };
+                    pipe.transform.SetParent(transform, false);
+                    pipe.transform.position = center;
+                    var renderer = pipe.AddComponent<SpriteRenderer>();
+                    renderer.sprite = sprite;
+                    renderer.color = new Color(.26f,.35f,.33f);
+                    renderer.sortingOrder = 0;
+                    pipe.transform.localScale = new Vector3(size.x / sprite.bounds.size.x, size.y / sprite.bounds.size.y, 1);
+                    pipe.AddComponent<BoxCollider2D>().size = sprite.bounds.size;
+                }
+            }
+        }
         private void OnRoomCleared(RoomController room)
         {
             if (run == null || room.RunId != run.RunId || !cleared.Add(room.RoomId)) return;
             preview?.CompleteRoom(room.RoomId);
             UpdateRoomLabel();
-            if (combatAssets != null && preview == null)
+            if (run.IsInSewer)
+            {
+                int stage = run.CitySegmentIndex;
+                Vector2 center = StreetMapLayout.Rooms[Array.IndexOf(Rooms, room) + 1].Center;
+                if (room.RoomId == "combat_b" && !sewerWeapon.State.IsMelee && sewerStage.Ammo(stage) > 0)
+                    Drop(room, PickupKind.Ammo, center, sewerStage.Ammo(stage));
+                if (room.RoomId == "combat_c" && sewerStage.Armor(stage) > 0)
+                    Drop(room, PickupKind.Armor, center, sewerStage.Armor(stage));
+            }
+            else if (combatAssets != null && preview == null)
             {
                 int index = Array.IndexOf(Rooms, room);
                 var layout = StreetMapLayout.Rooms[index + 1];
@@ -301,7 +369,7 @@ namespace Game.StreetMap
 
         private void DressCityExit()
         {
-            if (exitDressed || run.FullCityRoute == null || run.CitySegmentIndex < 10) return;
+            if (exitDressed || run.IsInSewer || run.FullCityRoute == null || run.CitySegmentIndex < 10) return;
             exitDressed = true;
             Vector2 location = Portal.transform.position;
             if (run.IsFinalCitySegment)
@@ -310,7 +378,13 @@ namespace Game.StreetMap
                 preview.Tile("Машина эвакуации", car, new Vector2(2.5f, 1.15f), new Color(.32f,.43f,.45f), 1);
                 preview.Tile("Лобовое стекло", car + Vector2.right * .26f, new Vector2(.60f,.85f), new Color(.17f,.24f,.29f), 2);
                 Stage5PreviewController.WorldLabel(preview.transform, car + Vector2.up, "Эвакуация");
-                Stage5PreviewController.WorldLabel(preview.transform, StreetMapLayout.Rooms[4].Center + new Vector2(-5, -3), "Канализация · закрыто");
+                if (run.CanEnterSewer)
+                {
+                    preview.Tile("Люк канализации", SewerHatch, new Vector2(1.35f, 1.1f), new Color(.24f,.35f,.33f), 2);
+                    preview.Outline("Контур люка", SewerHatch, new Vector2(1.35f, 1.1f));
+                    Stage5PreviewController.WorldLabel(preview.transform, SewerHatch + Vector2.up, "Канализация · E");
+                    sewerEntry = new SewerEntryScreen(controls.SafeRoot, CityArmory.Name(run.CityWeapon), ConfirmSewer, CloseSewerEntry);
+                }
                 return;
             }
             bool lift = run.CitySegmentIndex == 13;
@@ -329,9 +403,10 @@ namespace Game.StreetMap
             string label = lift ? "Лифт · на крышу" : "Лестница · на этаж выше";
             Stage5PreviewController.WorldLabel(preview.transform, location + Vector2.up, label);
         }
-        private void Drop(RoomController room, PickupKind kind, Vector2 position)
+        private void Drop(RoomController room, PickupKind kind, Vector2 position, int quantity = 0)
         {
             var pickup = combatAssets.CreatePickup(kind, position, transform);
+            if (quantity > 0) pickup.Configure(kind, quantity);
             pickup.Initialize(room.RunId, room.RoomId);
             pickups.Add(pickup);
         }
@@ -344,7 +419,7 @@ namespace Game.StreetMap
             foreach (var pickup in pickups)
             {
                 if (pickup == null || pickup.IsConsumed) continue;
-                if (pickup.Kind == PickupKind.Ammo && snapshot.ReserveAmmo >= WeaponRuntimeState.PickupReserveLimit ||
+                if (pickup.Kind == PickupKind.Ammo && (snapshot.ReserveAmmo >= WeaponRuntimeState.PickupReserveLimit || run.IsInSewer && snapshot.IsMelee) ||
                     pickup.Kind == PickupKind.Health && snapshot.Health >= snapshot.MaxHealth ||
                     pickup.Kind == PickupKind.Armor && snapshot.Armor >= snapshot.MaxArmor) continue;
                 Vector2 offset = (Vector2)pickup.transform.position - position;
@@ -359,7 +434,8 @@ namespace Game.StreetMap
         {
             if (run.CurrentRequest.IsStage5City)
             {
-                var label = CityDistrictDressing.RoomName(CityRegionRoute.DistrictAt(run.CitySegmentIndex), CurrentRoomId) ?? (CurrentRoomId switch
+                var label = run.IsInSewer ? (CurrentRoomId == "elite" && run.IsLastCitySegment ? "Иловый затворник" : sewerStage.Section(run.CitySegmentIndex)) :
+                    CityDistrictDressing.RoomName(CityRegionRoute.DistrictAt(run.CitySegmentIndex), CurrentRoomId) ?? (CurrentRoomId switch
                 {
                     "combat_a" => "Первый перекрёсток",
                     "combat_b" => "Переулок",
@@ -381,8 +457,9 @@ namespace Game.StreetMap
                 }
                 if (ClearedCount == 4)
                 {
-                    string travel = !run.CurrentRequest.IsFullCity ? "Вернуться в убежище" : run.IsFinalCitySegment
-                        ? "Эвакуация с крыши" : run.IsLastCitySegment ? "Завершить проверку" :
+                    string travel = run.IsInSewer ? (run.IsLastCitySegment ? "Убежище и награда" : "Следующий затвор · " + SewerStage.IdAt(run.CitySegmentIndex + 1)) :
+                        !run.CurrentRequest.IsFullCity ? "Вернуться в убежище" : run.IsFinalCitySegment
+                        ? (run.CanEnterSewer ? "Эвакуация или люк канализации" : "Эвакуация с крыши") : run.IsLastCitySegment ? "Завершить проверку" :
                         (run.CitySegmentIndex == 13 ? "Лифт" : run.CitySegmentIndex >= 10 ? "Лестница" : "Дальше") +
                             " · " + CityRegionRoute.IdAt(run.CitySegmentIndex + 1);
                     cityText += Portal != null && Portal.IsOpen ? $"\n{travel} · E рядом" : "\nНажмите E для размещения портала";
@@ -402,16 +479,36 @@ namespace Game.StreetMap
         }
         public void TryExit()
         {
-            if(run==null || run.Phase!=RunPhase.InArena || IsPaused || player.IsDead)return;
+            if(run==null || run.Phase!=RunPhase.InArena || IsPaused || player.IsDead || sewerEntry?.IsOpen == true || run.Stage5FinishBlocked)return;
             if (preview?.RetryCheckpoint() == true) return;
+            if (sewerEntry != null && Vector2.Distance(player.transform.position, SewerHatch) <= 1.5f)
+            {
+                controls.ClearHeld();
+                Time.timeScale = 0;
+                sewerEntry.Show(true);
+                return;
+            }
             if ((preview != null && preview.TryUseInteract()) || TryPickup() || ClearedCount != 4) return;
             if(!Portal.TryOpen(player)){UpdateRoomLabel();return;}
             DressCityExit();
             UpdateRoomLabel();
             if(Vector2.Distance(player.transform.position,Portal.transform.position)>1.5f)return;
             if (run.CurrentRequest.IsFullCity && !run.IsLastCitySegment)
-                run.AdvanceCity(player.ReadSnapshot, preview.CarriedMedkits);
+                run.AdvanceCity(player.ReadSnapshot, preview?.CarriedMedkits ?? 0);
             else run.FinishRun(RunOutcome.Victory);
+        }
+        private void ConfirmSewer(bool knife)
+        {
+            if (sewerEntry?.IsOpen != true) return;
+            sewerEntry.Show(false);
+            run.EnterSewer(knife, player.ReadSnapshot);
+        }
+
+        private void CloseSewerEntry()
+        {
+            if (sewerEntry?.IsOpen != true) return;
+            sewerEntry.Show(false);
+            Time.timeScale = 1;
         }
         private void CancelRooms()
         { if (Rooms!=null) foreach (var room in Rooms) if (room!=null) room.Cancel(); }
@@ -419,7 +516,7 @@ namespace Game.StreetMap
         public void TogglePause() { if (IsPaused) Resume(); else Pause(); }
         public void Pause()
         {
-            if (run == null || run.Phase != RunPhase.InArena || player.IsDead) return;
+            if (run == null || run.Phase != RunPhase.InArena || player.IsDead || sewerEntry?.IsOpen == true || run.Stage5FinishBlocked) return;
             IsPaused = true; controls.SetPaused(true); Time.timeScale = 0;
         }
         public void Resume()
@@ -438,6 +535,7 @@ namespace Game.StreetMap
         private void OnApplicationPause(bool paused) { if (paused) Pause(); }
         private void OnPhaseChanged()
         {
+            if (sewerRetry != null) sewerRetry.gameObject.SetActive(run.Stage5FinishBlocked);
             if (run.Stage5FinishBlocked && run.Phase == RunPhase.InArena)
             {
                 player.SetControlsEnabled(false);

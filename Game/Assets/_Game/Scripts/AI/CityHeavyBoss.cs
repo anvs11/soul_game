@@ -22,14 +22,15 @@ namespace Game.AI
             actor.transform.SetParent(parent, false);
             var skin = actor.AddComponent<SpriteRenderer>();
             skin.sprite = sprite;
-            skin.color = district switch { 0 => new Color(.85f,.32f,.16f), 1 => new Color(.8f,.51f,.19f), _ => new Color(.62f,.43f,.83f) };
+            skin.color = district switch { 0 => new Color(.85f,.32f,.16f), 1 => new Color(.8f,.51f,.19f),
+                3 => new Color(.48f,.75f,.31f), _ => new Color(.62f,.43f,.83f) };
             skin.sortingOrder = 3;
             var body = actor.AddComponent<Rigidbody2D>();
             body.gravityScale = 0;
             body.freezeRotation = true;
             actor.AddComponent<CircleCollider2D>().radius = .83f;
             actor.AddComponent<ActorIdentity>().SetFaction(CombatFaction.Enemy);
-            actor.AddComponent<DamageReceiver>().Configure(310 + district * 45, 0, .09f);
+            actor.AddComponent<DamageReceiver>().Configure(district == 3 ? 300 : 310 + district * 45, 0, .09f);
             var boss = actor.AddComponent<CityHeavyBoss>();
             boss.district = district;
             boss.pool = actor.AddComponent<ProjectilePool>();
@@ -58,23 +59,25 @@ namespace Game.AI
                         new DamagePacket(ActorId, 9 + 2 * district, attackId: attack));
                     pool.TrySpawn(in request);
                 }
-                remaining = enraged ? .86f : 1.25f;
+                remaining = district == 3 ? (enraged ? 1.12f : 1.65f) : enraged ? .86f : 1.25f;
                 return;
             }
-            bool fan = district != 2 || attack % 2 == 0;
+            bool fan = district == 3 ? attack % (enraged ? 2 : 3) == 0 : district != 2 || attack % 2 == 0;
             if (fan && !Visible(Body.position, HeroPosition))
             {
-                Travel(Vector2.Perpendicular(ToHero.normalized), dt * 1.8f, dt);
+                if (district == 3) Pursue(dt * 1.8f, dt);
+                else Travel(Vector2.Perpendicular(ToHero.normalized), dt * 1.8f, dt);
                 return;
             }
             warning = true;
             attack++;
             remaining = .85f;
-            directionCount = fan ? 3 : 12;
+            directionCount = fan ? (district == 3 && enraged ? 5 : 3) : 12;
             Vector2 toward = ToHero.sqrMagnitude > .01f ? ToHero.normalized : Vector2.down;
             for (int i = 0; i < directionCount; i++)
             {
-                float angle = fan ? (i - 1) * (district == 1 ? 19f : 11f) : (i + .5f) * 30f;
+                float angle = fan ? (i - (directionCount - 1) * .5f) * (district == 1 ? 19f : 11f)
+                    : (i + .5f) * 30f + (district == 3 && attack % 2 == 0 ? 15f : 0f);
                 Vector2 direction = Quaternion.Euler(0, 0, angle) * toward;
                 directions[i] = direction;
                 float length = WallDistance(Body.position, direction, 16f, .18f);

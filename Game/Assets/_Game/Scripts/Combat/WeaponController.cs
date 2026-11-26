@@ -23,6 +23,10 @@ namespace Game.Combat
         private long attackId;
         private int citySeed, cityShots;
         private bool cityCritical, fireAmmo;
+        private bool sewerWeaponLocked;
+        private float torchCooldown;
+        internal bool TorchReadyMode => sewerWeaponLocked && State.Selected && State.Magazine == 0 && State.ReserveAmmo == 0;
+        internal void LockSewerWeapon() => sewerWeaponLocked = true;
         public event Action Changed;
         public WeaponRuntimeState State => state ?? (state = new WeaponRuntimeState(definition));
         internal void EquipCityStarter()
@@ -77,16 +81,25 @@ namespace Game.Combat
             bool beforeReload = State.IsReloading, beforeSelected = State.Selected;
 
             var permissions = motor.Permissions;
-            if (command.SwitchPressed && permissions.CanSwitchWeapon) State.SetSelected(!State.Selected);
-            State.Advance(Time.deltaTime, command.AttackHeld);
-            var target = selector.Select(transform.position, State.IsMelee ? MeleeAttack.Radius : definition.TargetRange, identity.ActorId);
+            if (!sewerWeaponLocked && command.SwitchPressed && permissions.CanSwitchWeapon) State.SetSelected(!State.Selected);
+            State.Advance(Time.deltaTime, command.AttackHeld && !sewerWeaponLocked);
+            torchCooldown = Mathf.Max(0, torchCooldown - Time.deltaTime);
+            var target = selector.Select(transform.position, State.IsMelee || TorchReadyMode ? MeleeAttack.Radius : definition.TargetRange, identity.ActorId);
             if (target != null)
             {
                 Vector2 offset = target.transform.position - transform.position;
                 if (offset.sqrMagnitude > .0001f) { aim = offset.normalized; }
             }
             else if (command.Move.sqrMagnitude > .0001f) aim = command.Move.normalized;
-            if (permissions.CanAttack && command.AttackHeld && State.Selected)
+            if (permissions.CanAttack && command.AttackHeld && TorchReadyMode)
+            {
+                if (torchCooldown <= 0)
+                {
+                    torchCooldown = .88f;
+                    melee.Swing(transform.position, aim, identity.ActorId, identity.Faction, hitMask, ++attackId, 8);
+                }
+            }
+            else if (permissions.CanAttack && command.AttackHeld && State.Selected)
             {
                 bool critical = cityCritical && Game.Progression.CityEconomy.Roll(citySeed,
                     (cityShots + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), "critical", 8) == 0;

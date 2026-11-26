@@ -4,6 +4,8 @@ using Game.Street;
 using Game.Generation;
 using Game.StreetMap;
 using Game.Combat;
+using Game.Progression;
+using System.Linq;
 
 namespace Game.Core
 {
@@ -13,6 +15,8 @@ namespace Game.Core
         private RunOutcome? pendingOutcome;
         private bool disposed;
         private Func<CombatSnapshot> pendingAdvance;
+        private Func<CombatSnapshot> pendingSewer;
+        private bool sewerKnife;
         public StreetRoute StreetRoute { get; private set; }
         public int SegmentIndex { get; private set; }
         private StreetRoute requestedStreetRoute;
@@ -22,9 +26,14 @@ namespace Game.Core
         public CombatSnapshot? PlayerTransfer { get; private set; }
         public CityRegionRoute FullCityRoute { get; private set; }
         public int CitySegmentIndex { get; private set; }
-        public string CitySegmentId => CityRegionRoute.IdAt(CitySegmentIndex);
-        public bool IsFinalCitySegment => CitySegmentIndex == CityRegionRoute.SegmentCount - 1;
-        public bool IsLastCitySegment => CitySegmentIndex == CurrentRequest.LastPreviewSegment;
+        public string CitySegmentId => IsInSewer ? SewerStage.IdAt(CitySegmentIndex) : CityRegionRoute.IdAt(CitySegmentIndex);
+        public bool IsFinalCitySegment => !IsInSewer && CitySegmentIndex == CityRegionRoute.SegmentCount - 1;
+        public bool IsLastCitySegment => CitySegmentIndex == (IsInSewer ? SewerStage.SegmentCount - 1 : CurrentRequest.LastPreviewSegment);
+        public bool IsInSewer { get; private set; }
+        public int SewerReward { get; private set; }
+        internal string SewerStarter { get; private set; }
+        internal bool CanEnterSewer => CurrentRequest.IsFullCity && IsFinalCitySegment &&
+            CurrentRequest.VisualPreview is CityVisualPreview.None or CityVisualPreview.Sewer;
         public int CityMedkits { get; private set; }
         internal CityAmmoBackpack CityAmmo { get; } = new();
         public CityFirearm CityWeapon { get; internal set; }
@@ -116,6 +125,9 @@ namespace Game.Core
             ActiveArena = request.ArenaId;
             PlayerTransfer = null;
             pendingAdvance = null;
+            pendingSewer = null;
+            IsInSewer = false;
+            SewerReward = 0;
             RunId = id ?? Guid.NewGuid().ToString("N");
             LastOutcome = null;
             pendingOutcome = null;
@@ -149,18 +161,59 @@ namespace Game.Core
             pendingAdvance = readState;
         }
 
+        internal void EnterSewer(bool knife, Func<CombatSnapshot> readState)
+        {
+            if (Phase != RunPhase.InArena || !CanEnterSewer || pendingSewer != null) return;
+            sewerKnife = knife;
+            pendingSewer = readState;
+        }
+
         // The Unity owner calls this once in LateUpdate, after gameplay requests.
         public void ResolvePendingFinish()
         {
-            if (disposed || Phase != RunPhase.InArena) return;
-            if (pendingOutcome.HasValue && !Stage5FinishBlocked)
+            if (disposed || Phase != RunPhase.InArena || Stage5FinishBlocked) return;
+            if (pendingOutcome.HasValue)
             {
-                if (CurrentRequest.IsStage5City && !SaveStage5Finish(pendingOutcome.Value)) return;
+                if (IsInSewer)
+                {
+                    if (pendingOutcome == RunOutcome.Victory)
+                    {
+                        bool repeat = CityRuntime.Session.Snapshot.Profile.UnlockedIds.Contains(SewerEntryService.BlueprintId);
+                        if (!AcceptSave(CityRuntime.Session.CompleteSewer(RunId).Failure)) return;
+                        SewerReward = repeat ? SewerEntryService.RepeatCrystals : 0;
+                    }
+                }
+                else if (CurrentRequest.IsStage5City && !SaveStage5Finish(pendingOutcome.Value)) return;
                 LastOutcome = pendingOutcome;
                 pendingOutcome = null;
                 pendingAdvance = null;
+                pendingSewer = null;
                 PlayerTransfer = null;
                 Load(ScenePaths.Home, RunPhase.ReturningHome, RunPhase.Home);
+            }
+            else if (pendingSewer != null)
+            {
+                var state = pendingSewer();
+                if (state.IsDead || state.Health <= 0)
+                {
+                    FinishRun(RunOutcome.Defeat);
+                    ResolvePendingFinish();
+                    return;
+                }
+                var route = new CityRegionRoute(CurrentRequest.FixedEncounter, true);
+                if (!SaveStage5Finish(RunOutcome.Victory)) return;
+                SewerStarter = CityRuntime.Session.Snapshot.Profile.SelectedWeaponId;
+                FullCityRoute = route;
+                IsInSewer = true;
+                CitySegmentIndex = 0;
+                CityMedkits = 0;
+                int carried = sewerKnife ? 0 : Math.Min(CityAmmo.Count(CityWeapon),
+                    Math.Max(0, WeaponRuntimeState.PickupReserveLimit - state.ReserveAmmo));
+                // Compatible carried rounds are folded into the firearm at entry.
+                PlayerTransfer = SewerEntryService.Equip(state, sewerKnife, carried);
+                CityAmmo.Clear();
+                pendingSewer = null;
+                Load(ScenePaths.Stage4StreetMap, RunPhase.LoadingArena, RunPhase.InArena);
             }
             else if (pendingAdvance != null)
             {
@@ -174,10 +227,11 @@ namespace Game.Core
                 }
                 if (CurrentRequest.IsFullCity)
                 {
-                    var entered = CityRuntime.Enter(RunId, CityRegionRoute.IdAt(CitySegmentIndex + 1));
-                    if (entered.Failure != ProgressionFailure.None)
+                    var failure = IsInSewer ? ProgressionFailure.None :
+                        CityRuntime.Enter(RunId, CityRegionRoute.IdAt(CitySegmentIndex + 1)).Failure;
+                    if (failure != ProgressionFailure.None)
                     {
-                        Error = Stage5Runtime.Describe(entered.Failure);
+                        Error = Stage5Runtime.Describe(failure);
                         Changed?.Invoke();
                         return;
                     }
@@ -218,14 +272,16 @@ namespace Game.Core
         }
 
         private bool SaveStage5Finish(RunOutcome outcome)
+            => AcceptSave(CityRuntime.Finish(RunId, outcome).Failure);
+
+        private bool AcceptSave(ProgressionFailure failure)
         {
-            var result = CityRuntime.Finish(RunId, outcome);
-            if (result.Failure == ProgressionFailure.None)
+            if (failure == ProgressionFailure.None)
             {
                 Stage5FinishBlocked = false;
                 return true;
             }
-            Error = Stage5Runtime.Describe(result.Failure);
+            Error = Stage5Runtime.Describe(failure);
             Stage5FinishBlocked = true;
             Changed?.Invoke();
             return false;
@@ -273,6 +329,7 @@ namespace Game.Core
         {
             disposed = true;
             pendingAdvance = null;
+            pendingSewer = null;
             PlayerTransfer = null;
             pendingOutcome = null;
             Changed = null;

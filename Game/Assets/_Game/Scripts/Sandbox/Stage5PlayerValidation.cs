@@ -20,6 +20,7 @@ namespace Game.Sandbox
         private bool writeProfile;
         private bool stage6;
         private bool stage7;
+        private bool stage8;
         private string captureFolder;
         private float deadline;
 
@@ -41,7 +42,8 @@ namespace Game.Sandbox
             var validation = new GameObject("Stage 5 Player validation").AddComponent<Stage5PlayerValidation>();
             DontDestroyOnLoad(validation.gameObject);
             validation.writeProfile = write;
-            validation.stage7 = Array.IndexOf(args, "--stage7-smoke") >= 0;
+            validation.stage8 = Array.IndexOf(args, "--stage8-smoke") >= 0;
+            validation.stage7 = validation.stage8 || Array.IndexOf(args, "--stage7-smoke") >= 0;
             validation.stage6 = validation.stage7 || Array.IndexOf(args, "--stage6-smoke") >= 0;
             if (validation.stage6 && !Application.isBatchMode && Array.IndexOf(args, "--stage6-capture") >= 0)
                 validation.captureFolder = args[profileOption + 1];
@@ -174,6 +176,19 @@ namespace Game.Sandbox
                             enemy.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1, 999));
                 }
                 yield return new WaitUntil(() => arena.Portal.IsOpen);
+                if (stage8 && index == CityRegionRoute.SegmentCount - 1)
+                {
+                    var hatch = GameObject.Find("Люк канализации");
+                    if (!Check(hatch != null, "The City roof is missing its sewer hatch.")) yield break;
+                    Move(body, hatch.transform.position);
+                    arena.TryExit();
+                    yield return Capture("SewerEntry");
+                    var enter = FindButton("Взять Карабин");
+                    if (!Check(enter != null, "The sewer loadout does not offer the equipped carbine.")) yield break;
+                    enter.onClick.Invoke();
+                    yield return ExerciseSewer(run);
+                    yield break;
+                }
                 Move(body, arena.Portal.transform.position);
                 arena.TryExit();
                 Debug.Log($"S7_SEGMENT seed={Seed} segment={CityRegionRoute.IdAt(index)}");
@@ -183,6 +198,42 @@ namespace Game.Sandbox
             if (!Check(run.LastOutcome == RunOutcome.Victory && profile.CompletedRegionIds.Contains("city"),
                 "Roof victory did not save the completion.")) yield break;
             Debug.Log($"S7_PLAYER_OK seed={Seed} segments=15 balance={profile.ConfirmedCrystals} build={Application.buildGUID}");
+            enabled = false;
+            Application.Quit(0);
+        }
+
+        private IEnumerator ExerciseSewer(RunCoordinator run)
+        {
+            for (int index = 0; index < SewerStage.SegmentCount; index++)
+            {
+                yield return new WaitUntil(() => run.Phase == RunPhase.InArena && run.IsInSewer && run.CitySegmentIndex == index);
+                var arena = FindFirstObjectByType<StreetMapScreen>();
+                if (!Check(run.Stage5.Session.Snapshot.Profile.CompletedRegionIds.Contains("city"),
+                    "City victory was not saved before entering the sewer.")) yield break;
+                if (index == 0)
+                {
+                    if (!Check(arena.Player.ReadSnapshot().Armor == 0, "Sewer entry retained roof armor.")) yield break;
+                    yield return Capture("Sewer");
+                }
+                var body = arena.Player.GetComponent<Rigidbody2D>();
+                for (int room = 0; room < arena.Rooms.Length; room++)
+                {
+                    Move(body, StreetMapLayout.Rooms[room + 1].Center);
+                    yield return new WaitUntil(() => arena.Rooms[room].State.AliveCount > 0);
+                    if (index == SewerStage.SegmentCount - 1 && room == 3) yield return Capture("SewerBoss");
+                    foreach (var actor in FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None))
+                        if (actor is IEnemyTarget enemy && !enemy.IsDead)
+                            actor.GetComponent<DamageReceiver>().ApplyDamage(new DamagePacket(-1, 999));
+                }
+                yield return new WaitUntil(() => arena.Portal.IsOpen);
+                Move(body, arena.Portal.transform.position);
+                arena.TryExit();
+            }
+            yield return new WaitUntil(() => run.Phase == RunPhase.Home);
+            if (!Check(run.LastOutcome == RunOutcome.Victory &&
+                run.Stage5.Session.Snapshot.Profile.UnlockedIds.Contains("blueprint-sealed-mechanism"),
+                "Sewer victory did not save the blueprint.")) yield break;
+            Debug.Log($"S8_PLAYER_OK seed={Seed} segments=5 build={Application.buildGUID}");
             enabled = false;
             Application.Quit(0);
         }
@@ -202,6 +253,7 @@ namespace Game.Sandbox
             if (camera == null) yield break;
             var overlays = FindObjectsByType<Canvas>(FindObjectsSortMode.None)
                 .Where(canvas => canvas.isRootCanvas && canvas.renderMode == RenderMode.ScreenSpaceOverlay).ToArray();
+            var sortingOrders = overlays.Select(canvas => canvas.sortingOrder).ToArray();
             var frame = RenderTexture.GetTemporary(1280, 720, 24);
             var priorTarget = camera.targetTexture;
             var priorActive = RenderTexture.active;
@@ -213,6 +265,8 @@ namespace Game.Sandbox
                     overlay.renderMode = RenderMode.ScreenSpaceCamera;
                     overlay.worldCamera = camera;
                     overlay.planeDistance = 1;
+                    // The temporary camera canvas still belongs above any world effects.
+                    overlay.sortingOrder += 200;
                 }
                 Canvas.ForceUpdateCanvases();
                 camera.Render();
@@ -225,10 +279,12 @@ namespace Game.Sandbox
             }
             finally
             {
-                foreach (var overlay in overlays)
+                for (int index = 0; index < overlays.Length; index++)
                 {
+                    var overlay = overlays[index];
                     overlay.renderMode = RenderMode.ScreenSpaceOverlay;
                     overlay.worldCamera = null;
+                    overlay.sortingOrder = sortingOrders[index];
                 }
                 camera.targetTexture = priorTarget;
                 RenderTexture.active = priorActive;

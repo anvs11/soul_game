@@ -28,7 +28,8 @@ namespace Game.Tests
     public sealed class MapTestCommands : MonoBehaviour, IPlayerInputSource
     {
         public Vector2 Move;
-        public PlayerCommand ReadCommand() => new PlayerCommand(Move);
+        public bool Attack, Switch;
+        public PlayerCommand ReadCommand() => new PlayerCommand(Move, attackHeld: Attack, switchPressed: Switch);
     }
     // The batch Editor can route automatic events away from the unfocused Game View.
     [DefaultExecutionOrder(-1000)]
@@ -1100,6 +1101,176 @@ namespace Game.Tests
             Park(playerBody, origin + Vector2.right * 2.1f);
             Assert.That(Physics2D.Linecast(zombieBody.position, playerBody.position, LayerMask.GetMask("World")).collider, Is.SameAs(shelf));
             yield return Until(() => zombieBody.position.x > origin.x + .75f, "Melee stayed on the wrong side of the shelf.");
+        }
+
+        [UnityTest]
+        public IEnumerator Sewer_CancelKeepsRoofEquipmentAndKnifeCanFightAfterTheEntry()
+        {
+            var run = boot.Coordinator;
+            run.SetStage5Runtime(new Stage5Runtime(CityTestDirectory()));
+            yield return StartVisualPreview("Крыша и канализация · 3-5 → 4-5");
+            var roof = Object.FindFirstObjectByType<StreetMapScreen>();
+            yield return ClearVisualSegment(roof);
+            var before = roof.Player.ReadSnapshot();
+            OpenSewerHatch(roof);
+            FindPreviewButton("Остаться на крыше").onClick.Invoke();
+            Assert.That(roof.Player.ReadSnapshot(), Is.EqualTo(before));
+            Assert.That(Time.timeScale, Is.EqualTo(1));
+            OpenSewerHatch(roof);
+            FindPreviewButton("Взять нож").onClick.Invoke();
+            yield return Until(() => run.Phase == RunPhase.InArena && run.CitySegmentId == "4-1");
+            var map = Object.FindFirstObjectByType<StreetMapScreen>();
+            var hero = map.Player;
+            var state = hero.ReadSnapshot();
+            Assert.That(state.Armor, Is.Zero);
+            Assert.That(state.Health, Is.EqualTo(before.Health));
+            Assert.That(state.IsMelee && state.Magazine == 0 && state.ReserveAmmo == 0, Is.True);
+            Assert.That(GameObject.Find("Свет факела"), Is.Not.Null);
+            var weapon = hero.GetComponent<WeaponController>().State;
+            weapon.RestoreForEncounter(0, 0, 0, true);
+            var commands = SetSewerTestInput(hero);
+            commands.Switch = true;
+            commands.Attack = true;
+            yield return Until(() => weapon.Stamina > 0);
+            Assert.That(weapon.IsMelee, Is.True);
+            Apply(hero.GetComponent<DamageReceiver>(), 999);
+            yield return Until(() => run.Phase == RunPhase.Home);
+            Assert.That(run.LastOutcome, Is.EqualTo(RunOutcome.Defeat));
+            Assert.That(run.Stage5.Session.Snapshot.Profile.CompletedRegionIds, Is.Empty, "The practice profile is isolated.");
+        }
+
+        [UnityTest]
+        public IEnumerator Sewer_CityVictorySurvivesDefeatAndRewardsPersistAcrossRealAttempts()
+        {
+            var run = boot.Coordinator;
+            string directory = CityTestDirectory();
+            run.SetStage5Runtime(new Stage5Runtime(directory));
+            const string blueprint = "blueprint-sealed-mechanism";
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                var home = Object.FindFirstObjectByType<HomeScreen>();
+                if (home.IsShowingResult) home.PrimaryButton.onClick.Invoke();
+                home.FixedSeedInput.text = "5";
+                home.FullCityButton.onClick.Invoke();
+                for (int segment = 0; segment < 15; segment++)
+                {
+                    int expected = segment;
+                    yield return Until(() => run.Phase == RunPhase.InArena && !run.IsInSewer && run.CitySegmentIndex == expected);
+                    var map = Object.FindFirstObjectByType<StreetMapScreen>();
+                    yield return ClearSewerTestSegment(map);
+                    if (segment == 14)
+                    {
+                        OpenSewerHatch(map);
+                        FindPreviewButton("Взять Пистолет").onClick.Invoke();
+                    }
+                    else UsePortal(map);
+                }
+                yield return Until(() => run.Phase == RunPhase.InArena && run.CitySegmentId == "4-1");
+                Assert.That(run.Stage5.Session.Snapshot.Profile.CompletedRegionIds, Does.Contain("city"));
+                int before = run.Stage5.Session.Snapshot.Profile.ConfirmedCrystals;
+                if (attempt == 0)
+                {
+                    var hero = Object.FindFirstObjectByType<StreetMapScreen>().Player;
+                    Apply(hero.GetComponent<DamageReceiver>(), 999);
+                    yield return Until(() => run.Phase == RunPhase.Home);
+                    Assert.That(run.LastOutcome, Is.EqualTo(RunOutcome.Defeat));
+                }
+                else
+                {
+                    for (int segment = 0; segment < SewerStage.SegmentCount; segment++)
+                    {
+                        string expected = $"4-{segment + 1}";
+                        yield return Until(() => run.Phase == RunPhase.InArena && run.CitySegmentId == expected);
+                        var map = Object.FindFirstObjectByType<StreetMapScreen>();
+                        var reachable = StreetMapCatalog.Reachable(.45f);
+                        Assert.That(StreetMapLayout.Rooms.All(room => reachable.Contains(Vector2Int.FloorToInt(room.Center))), Is.True);
+                        if (segment == 0 && attempt == 1) yield return VerifyTorchAttack(map);
+                        yield return ClearSewerTestSegment(map, verifyBoss: segment == 4 && attempt == 1);
+                        UsePortal(map);
+                        map.TryExit();
+                    }
+                    yield return Until(() => run.Phase == RunPhase.Home);
+                    Assert.That(run.LastOutcome, Is.EqualTo(RunOutcome.Victory));
+                }
+                run.SetStage5Runtime(new Stage5Runtime(directory));
+                var profile = run.Stage5.Session.Snapshot.Profile;
+                Assert.That(profile.CompletedRegionIds, Does.Contain("city"));
+                Assert.That(profile.UnlockedIds.Count(id => id == blueprint), Is.EqualTo(attempt == 0 ? 0 : 1));
+                Assert.That(profile.ConfirmedCrystals, Is.EqualTo(before + (attempt == 2 ? 150 : 0)));
+            }
+        }
+
+        private static IEnumerator VerifyTorchAttack(StreetMapScreen map)
+        {
+            var hero = map.Player;
+            var body = hero.GetComponent<Rigidbody2D>();
+            var weapon = hero.GetComponent<WeaponController>().State;
+            weapon.RestoreForEncounter(0, 0, 0, false);
+            var commands = SetSewerTestInput(hero);
+            commands.Switch = true;
+            Park(body, StreetMapLayout.Rooms[1].Center);
+            yield return Until(() => map.Rooms[0].State.AliveCount > 0);
+            var enemy = Object.FindObjectsByType<SandboxEnemy>(FindObjectsSortMode.None).First(actor => !actor.IsDead);
+            var target = enemy.GetComponent<DamageReceiver>();
+            float before = target.Health;
+            Park(body, StreetMapLayout.Rooms[1].Center);
+            Park(enemy.GetComponent<Rigidbody2D>(), body.position + Vector2.right * .95f);
+            commands.Attack = true;
+            yield return Until(() => target.Health < before, "An empty gun must allow a torch hit.");
+            Assert.That(weapon.IsMelee, Is.False);
+            Assert.That(weapon.Magazine + weapon.ReserveAmmo, Is.Zero);
+            commands.Attack = commands.Switch = false;
+        }
+
+        private static MapTestCommands SetSewerTestInput(PlayerCombatFacade hero)
+        {
+            var motor = hero.GetComponent<ActorMotor2D>();
+            motor.enabled = false;
+            var commands = hero.gameObject.AddComponent<MapTestCommands>();
+            motor.Configure(commands);
+            motor.enabled = true;
+            return commands;
+        }
+
+        private static IEnumerator ClearSewerTestSegment(StreetMapScreen map, bool verifyBoss = false)
+        {
+            var body = map.Player.GetComponent<Rigidbody2D>();
+            for (int index = 0; index < map.Rooms.Length; index++)
+            {
+                var room = map.Rooms[index];
+                Park(body, StreetMapLayout.Rooms[index + 1].Center);
+                yield return Until(() => room.State.AliveCount == room.State.Plan.Waves[0].Spawns.Count);
+                if (verifyBoss && index == 3)
+                {
+                    var boss = Object.FindFirstObjectByType<CityHeavyBoss>();
+                    Assert.That(boss, Is.Not.Null);
+                    var damage = boss.GetComponent<DamageReceiver>();
+                    Assert.That(damage.Health, Is.EqualTo(300));
+                    yield return Until(() => boss.GetComponentsInChildren<SpriteRenderer>().Count(renderer =>
+                        renderer.enabled && renderer.name == "City boss warning") == 3);
+                    Apply(damage, 160);
+                    yield return Until(() => boss.GetComponentsInChildren<SpriteRenderer>().Count(renderer =>
+                        renderer.enabled && renderer.name == "City boss warning") == 5);
+                }
+                foreach (var actor in Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None))
+                    if (actor is IEnemyTarget enemy && !enemy.IsDead) Kill(actor);
+            }
+            yield return Until(() => map.Portal.IsOpen);
+        }
+
+        private static void UsePortal(StreetMapScreen map)
+        {
+            Park(map.Player.GetComponent<Rigidbody2D>(), map.Portal.transform.position);
+            map.TryExit();
+        }
+
+        private static void OpenSewerHatch(StreetMapScreen map)
+        {
+            var hatch = GameObject.Find("Люк канализации");
+            Assert.That(hatch, Is.Not.Null);
+            Assert.That(Vector2.Distance(hatch.transform.position, map.Portal.transform.position), Is.GreaterThanOrEqualTo(3.19f));
+            Park(map.Player.GetComponent<Rigidbody2D>(), hatch.transform.position);
+            map.TryExit();
         }
 
         private IEnumerator StartVisualPreview(string label)

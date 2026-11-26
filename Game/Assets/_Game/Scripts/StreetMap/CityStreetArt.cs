@@ -33,7 +33,7 @@ namespace Game.StreetMap
                     int x = column * PixelsPerCell + localX, y = row * PixelsPerCell + localY;
                     pixels[y * atlas.width + x] = district == 0
                         ? (road ? Asphalt(cell, localX, localY) : Building(cell, x, y))
-                        : Interior(cell, x, y, road, border, district, rooftop);
+                        : district == 3 ? Sewer(x, y, road, border) : Interior(cell, x, y, road, border, district, rooftop);
                 }
             }
             atlas.SetPixels32(pixels);
@@ -45,6 +45,16 @@ namespace Game.StreetMap
             renderer.sortingOrder = -9;
 
             bool Walkable(Vector2Int cell) => contours?.IsWalkable(cell) ?? StreetMapLayout.IsWalkable(cell);
+        }
+
+        private static Color32 Sewer(int x, int y, bool walkable, bool border)
+        {
+            if (border) return x % 10 is 1 or 8 || y % 10 is 1 or 8
+                ? new Color32(78, 94, 89, 255) : new Color32(37, 45, 42, 255);
+            if (!walkable) return new Color32(15, 22, 20, 255);
+            int groove = (x + y / 20 * 7) % 40;
+            if (x % 10 == 0 || y % 10 == 0) return new Color32(49, 58, 54, 255);
+            return groove < 12 ? new Color32(47, 88, 74, 255) : new Color32(73, 86, 72, 255);
         }
 
         private static Color32 Interior(Vector2Int cell, int x, int y, bool walkable, bool border, int district, bool rooftop)

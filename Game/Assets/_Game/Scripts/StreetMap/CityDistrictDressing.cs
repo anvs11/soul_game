@@ -145,7 +145,7 @@ namespace Game.StreetMap
         private static void WorldSign(Stage5PreviewController view, Vector2 position, string label) =>
             Stage5PreviewController.WorldLabel(view.transform, position, label);
 
-        private static bool HasClearance(EncounterRoom room, Vector2 center, Vector2 size)
+        internal static bool HasClearance(EncounterRoom room, Vector2 center, Vector2 size)
         {
             var min = center - size * .5f;
             var max = center + size * .5f;

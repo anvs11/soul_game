@@ -18,7 +18,7 @@ namespace Game.Core
 
     public enum RunOutcome { Victory, Defeat, Abandoned }
     public enum RunPhase { Booting, Home, LoadingArena, InArena, ReturningHome, Faulted }
-    public enum CityVisualPreview { None, Street, Market, Office }
+    public enum CityVisualPreview { None, Street, Market, Office, Sewer }
 
     public readonly struct RunRequest
     {
@@ -29,7 +29,8 @@ namespace Game.Core
         public bool IsStage5City { get; }
         public bool IsFullCity { get; }
         public CityVisualPreview VisualPreview { get; }
-        internal int FirstCitySegment => VisualPreview switch { CityVisualPreview.Market => 5, CityVisualPreview.Office => 13, _ => 0 };
+        internal int FirstCitySegment => VisualPreview switch
+        { CityVisualPreview.Market => 5, CityVisualPreview.Office => 13, CityVisualPreview.Sewer => 14, _ => 0 };
         internal int LastPreviewSegment => VisualPreview switch { CityVisualPreview.Street => 2, CityVisualPreview.Market => 5, _ => 14 };
         public bool IsStreetRun => ArenaId == ScenePaths.Stage3StreetSandbox;
         public bool IsFixedStreet1_1 => ArenaId == ScenePaths.Stage4StreetMap;

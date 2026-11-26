@@ -12,6 +12,7 @@ namespace Game.UI
         private Rect lastSafe;
         private Action pause, resume, leave;
         private Text attackLabel;
+        private GameObject weaponSwitch;
         public OnScreenStick Stick { get; private set; }
         public OnScreenButton Attack { get; private set; }
         public OnScreenButton Dodge { get; private set; }
@@ -40,7 +41,7 @@ namespace Game.UI
             if (enableDodge)
                 Dodge = Control("Кувырок", new Vector2(1, 0), new Vector2(-100, 237),
                     new Vector2(120, 80), "<Gamepad>/rightShoulder");
-            Control("Оружие",new Vector2(1,0),new Vector2(-245,190),new Vector2(110,80),"<Gamepad>/buttonNorth");
+            weaponSwitch=Control("Оружие",new Vector2(1,0),new Vector2(-245,190),new Vector2(110,80),"<Gamepad>/buttonNorth").gameObject;
             Control("Взять / E",new Vector2(1,0),new Vector2(-245,80),new Vector2(110,80),"<Gamepad>/buttonWest");
             if (enableNpc)
                 Npc = Control("НПС / Tab", new Vector2(1,0), new Vector2(-375,80), new Vector2(118,80), "<Gamepad>/buttonEast");
@@ -53,6 +54,7 @@ namespace Game.UI
         }
         public void SetPaused(bool value) { ClearHeld(); if(menu!=null)menu.SetActive(value); if(gameplay!=null)gameplay.SetActive(!value); }
         internal void SetPassageLabel(string label) => attackLabel.text = label ?? "Огонь";
+        internal void HideWeaponSwitch() => weaponSwitch.SetActive(false);
         public void ClearHeld()
         {
             if(gameplay==null || EventSystem.current==null)return;
