@@ -35,9 +35,11 @@ namespace Game.Encounters
         public const string SlimeGrenadier = "elite_slime_grenadier", ShieldShotgun = "elite_shield_shotgun", TeleportNurse = "elite_teleport_nurse";
         public static bool IsElite(string id) => id == SlimeGrenadier || id == ShieldShotgun || id == TeleportNurse;
         public const string HeavyBoss = "heavy_boss";
-        public static bool IsKnown(string id) => id == Melee || id == Jumper || id == Shooter || IsElite(id) || id == HeavyBoss;
-        public static float Radius(string id) => id == HeavyBoss ? 1.2f : IsElite(id) ? 1f : .5f;
-        public static int Cost(string id) => id == HeavyBoss ? 9 : IsElite(id) ? 3 : 1;
+        public const string RanchDeer = "ranch_deer";
+        public static bool IsBoss(string id) => id == HeavyBoss || id == RanchDeer;
+        public static bool IsKnown(string id) => id == Melee || id == Jumper || id == Shooter || IsElite(id) || IsBoss(id);
+        public static float Radius(string id) => IsBoss(id) ? 1.2f : IsElite(id) ? 1f : .5f;
+        public static int Cost(string id) => IsBoss(id) ? 9 : IsElite(id) ? 3 : 1;
     }
     public sealed class SpawnPoint
     {

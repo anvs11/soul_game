@@ -39,7 +39,7 @@ namespace Game.Progression
                 : 0;
             int crystals = enemyTypeId switch
             {
-                HeavyBossEnemyTypeId => 270,
+                _ when EnemyTypes.IsBoss(enemyTypeId) => 270,
                 SmallZombieEnemyTypeId => 11 + Roll(seed, spawnId, "crystals", 5),
                 _ when EnemyTypes.IsElite(enemyTypeId) => 75,
                 _ => 5 + Roll(seed, spawnId, "crystals", 6)
