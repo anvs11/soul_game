@@ -17,8 +17,8 @@
 - [x] (2026-11-27) S9-01. Реализованы и проверены зомби-олень и капкан. Исходники e08135d, полный EditMode 188/188, PlayMode 33/33 на macOS arm64, из них 5 тестов ранчо и 28 регрессий фиксированной карты. [Передача У2](../S9_01_RANCH_COMBAT_HANDOFF.md)
 - [x] (2026-11-27) S9-02. Карта, каталог, prefab У1, снабжение и выход подключены к диагностическому запуску из Home. SHA 196b2e8, EditMode 189/189, PlayMode 34/34 на macOS arm64. [Передача карты](../S9_02_RANCH_MAP_HANDOFF.md)
 - [x] (2026-11-27) S9-03. Подключены запуск из Home, профиль, стартовое оружие, контрольные точки и повтор сохранения. Профильная часть 1bfa522, интеграция 59c3f3c. EditMode 193/193, PlayMode с регрессией 37/37 на macOS arm64. [Передача S9-03](../S9_03_RANCH_PROFILE_HANDOFF.md)
-- [x] (2026-11-27) S9-04. На интеграции `59c3f3c` пройдены полный EditMode 193/193, целевой PlayMode 37/37 и полный PlayMode 155/155. Собран macOS Player. Повтор У1 на seed 41 подтвердил смерть до и после контрольной точки, победу и два перезапуска. [Отчёт, XML и логи](../S9_RANCH_ACCEPTANCE.md)
-- [ ] S9-04. Ручной баланс. Оконный macOS Player открыт. Ожидаются три попытки на seed 41, 73 и 109.
+- [x] (2026-11-27) S9-04. На интеграции `59c3f3c` пройдены полный EditMode 193/193, целевой PlayMode 37/37 и полный PlayMode 155/155. Целевой EditMode 5/5 повторён после добавления команд сборки. Собран macOS Player. Повтор У1 на seed 41 подтвердил смерть до и после контрольной точки, победу и два перезапуска. [Отчёт, XML и логи](../S9_RANCH_ACCEPTANCE.md)
+- [ ] S9-04. Ручной баланс. Оконный macOS Player запускался для seed 41, 73 и 109. После завершения Player ожидаются результаты игрока.
 - [ ] S9-04. Windows Player и запуск на Windows. Локальная проверка сборки выявила отсутствие Windows Build Support. Установка отложена по решению пользователя.
 - [ ] S9-04. Сборка Android и проверка на устройстве. В локальном редакторе Android Build Support отсутствует.
 
@@ -42,7 +42,7 @@ Home уже читает CompletedRegionIds и показывает, досту�
 
 ## Outcomes & Retrospective
 
-На базе `e11ee0a` подготовлены план, стартовые промпты и передача У1. S9-01 поставил prefab оленя и капкана. S9-02 подключил геометрию и диагностический маршрут. S9-03 подключил постоянный профиль и запуск из Home. В S9-04 интеграция `59c3f3c` прошла все три автоматических набора, а проверка профиля в macOS Player `s9-20261127-080316-cc9ff474` подтвердила сохранение контрольной точки, победы и данных после двух перезапусков. Открытые игровые и платформенные проверки перечислены в [отчёте S9-04](../S9_RANCH_ACCEPTANCE.md).
+На базе `e11ee0a` подготовлены план, стартовые промпты и передача У1. S9-01 поставил prefab оленя и капкана. S9-02 подключил геометрию и диагностический маршрут. S9-03 подключил постоянный профиль и запуск из Home. В S9-04 интеграция `59c3f3c` прошла полные и целевые автоматические наборы, а проверка профиля в macOS Player `s9-20261127-080316-cc9ff474` подтвердила сохранение контрольной точки, победы и данных после двух перезапусков. Открытые игровые и платформенные проверки перечислены в [отчёте S9-04](../S9_RANCH_ACCEPTANCE.md).
 
 ## Context and Orientation
 
@@ -88,7 +88,7 @@ Game/Assets/_Game/Scripts/StreetMap содержит карту, RoomController,
     "$unity_editor" -batchmode -nographics -projectPath "$PWD/Game" -runTests -testPlatform PlayMode -testResults "$report_dir/PlayMode.xml" -logFile "$report_dir/PlayMode.log"
     "$unity_editor" -batchmode -nographics -projectPath "$PWD/Game" -buildTarget StandaloneWindows64 -executeMethod Game.Editor.BuildCommands.BuildStage9Windows -quit -logFile "$report_dir/BuildWindows.log"
 
-Для целевого PlayMode добавьте к команде PlayMode `-testFilter 'Game\.Tests\.(RanchMapPlayTests|RanchCombatTests|FixedStreetMapPlayTests)'` и задайте отдельный XML. Для macOS используйте `-buildTarget StandaloneOSX -executeMethod Game.Editor.BuildCommands.BuildStage9Mac`. Все вызовы тестов и сборки запускайте последовательно в закрытой рабочей копии Unity или в отдельной копии нужного SHA. Успешные XML содержат выполненные тесты и ноль ошибок. Журнал и BuildReport фиксируют результат сборки и путь к Player.
+Для целевых прогонов используйте `-testFilter 'Game\.Tests\.(RanchLayoutTests|RanchProgressionTests)'` в EditMode и `-testFilter 'Game\.Tests\.(RanchMapPlayTests|RanchCombatTests|FixedStreetMapPlayTests)'` в PlayMode. Задайте отдельные XML. Для macOS используйте `-buildTarget StandaloneOSX -executeMethod Game.Editor.BuildCommands.BuildStage9Mac`. Все вызовы тестов и сборки запускайте последовательно в закрытой рабочей копии Unity или в отдельной копии нужного SHA. Успешные XML содержат выполненные тесты и ноль ошибок. Журнал и BuildReport фиксируют результат сборки и путь к Player.
 
 Задайте `ranch_player` полным путём к исполняемому файлу Development Player. Выполните три запуска по очереди, с тем же новым каталогом профиля в `report_dir`. Начальный профиль создаётся в `death`, затем два новых процесса читают его и подтверждают победу и повторное чтение. Ожидается `S9_PLAYER_OK` в каждом логе и код выхода 0.
 
