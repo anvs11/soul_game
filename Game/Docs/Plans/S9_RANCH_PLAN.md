@@ -17,13 +17,18 @@
 - [x] (2026-11-27) S9-01. Реализованы и проверены зомби-олень и капкан. Исходники e08135d, полный EditMode 188/188, PlayMode 33/33 на macOS arm64, из них 5 тестов ранчо и 28 регрессий фиксированной карты. [Передача У2](../S9_01_RANCH_COMBAT_HANDOFF.md)
 - [x] (2026-11-27) S9-02. Карта, каталог, prefab У1, снабжение и выход подключены к диагностическому запуску из Home. SHA 196b2e8, EditMode 189/189, PlayMode 34/34 на macOS arm64. [Передача карты](../S9_02_RANCH_MAP_HANDOFF.md)
 - [x] (2026-11-27) S9-03. Подключены запуск из Home, профиль, стартовое оружие, контрольные точки и повтор сохранения. Профильная часть 1bfa522, интеграция 59c3f3c. EditMode 193/193, PlayMode с регрессией 37/37 на macOS arm64. [Передача S9-03](../S9_03_RANCH_PROFILE_HANDOFF.md)
-- [ ] S9-04. Провести автоматическую, ручную и платформенную приёмку, приложить доказательства.
+- [x] (2026-11-27) S9-04. На интеграции `59c3f3c` пройдены полный EditMode 193/193, целевой PlayMode 37/37 и полный PlayMode 155/155. Собран macOS Player. Повтор У1 на seed 41 подтвердил смерть до и после контрольной точки, победу и два перезапуска. [Отчёт, XML и логи](../S9_RANCH_ACCEPTANCE.md)
+- [ ] S9-04. Ручной баланс. Оконный macOS Player открыт. Ожидаются три попытки на seed 41, 73 и 109.
+- [ ] S9-04. Windows Player и запуск на Windows. Локальная проверка сборки выявила отсутствие Windows Build Support. Установка отложена по решению пользователя.
+- [ ] S9-04. Сборка Android и проверка на устройстве. В локальном редакторе Android Build Support отсутствует.
 
 ## Surprises & Discoveries
 
 Home уже читает CompletedRegionIds и показывает, доступно ли ранчо по прогрессу, но в текущем меню нет маршрута ранчо. CityRegionDefinition требует три района ровно по пять сегментов. ProfileData проверяет активную стадию по CityEconomy.FullRoute. Для отдельного региона потребуется явный допустимый ID на границе профиля и отдельный путь запуска. Добавление ранчо в CityEconomy.FullRoute изменило бы длину и смысл существующего CITY.
 
 Отчёт Stage 8 фиксирует 188/188 EditMode, 28/28 PlayMode для фиксированной карты и Windows-автопрогон всей канализации. Итоги относятся к программно управляемым боям. Ручная оценка Stage 8 включена в S9-00 как открытый исходный замер.
+
+Проверка модулей на редакторе приёмки вернула `windows=False mac=True android=False`. Команда Windows завершилась до сборки с `Build module unavailable: StandaloneWindows64`. macOS Player из той же копии собрался и запустился.
 
 ## Decision Log
 
@@ -33,9 +38,11 @@ Home уже читает CompletedRegionIds и показывает, досту�
 
 27 ноября 2026, Codex. Полноценный маршрут использует обычный профиль, а режим «Проверка ранчо» использует профиль в памяти. Завершение ранчо записывает ranch один раз. За новые обычные попытки игрок получает стандартные кристаллы за зачистки. Отдельная постоянная награда и новый уровень разблокировки для первого среза не нужны. Совместимые профили CITY и канализации читаются существующим репозиторием.
 
+27 ноября 2026, Codex. По решению пользователя Windows остаётся открытым. Для игрового замера используется оконный macOS Player. Для повтора У1 используется отдельный профиль на диске и три новых процесса с одним `buildGUID`, чтобы проверить восстановление после завершения процесса Unity.
+
 ## Outcomes & Retrospective
 
-На базе e11ee0a подготовлены план, стартовые промпты и передача У1. В S9-00 подтверждено совпадение локального main с GitHub и зафиксирован блокер ручного замера Stage 8. S9-01 поставляет два prefab и подтверждает их поведение на испытательной карте Unity. Геометрия амбара, ручной баланс и Player остаются открыты. В конце этапа укажите фактический SHA, проверенные сценарии и площадки, где осталось пройти приёмку.
+На базе `e11ee0a` подготовлены план, стартовые промпты и передача У1. S9-01 поставил prefab оленя и капкана. S9-02 подключил геометрию и диагностический маршрут. S9-03 подключил постоянный профиль и запуск из Home. В S9-04 интеграция `59c3f3c` прошла все три автоматических набора, а проверка профиля в macOS Player `s9-20261127-080316-cc9ff474` подтвердила сохранение контрольной точки, победы и данных после двух перезапусков. Открытые игровые и платформенные проверки перечислены в [отчёте S9-04](../S9_RANCH_ACCEPTANCE.md).
 
 ## Context and Orientation
 
@@ -81,7 +88,15 @@ Game/Assets/_Game/Scripts/StreetMap содержит карту, RoomController,
     "$unity_editor" -batchmode -nographics -projectPath "$PWD/Game" -runTests -testPlatform PlayMode -testResults "$report_dir/PlayMode.xml" -logFile "$report_dir/PlayMode.log"
     "$unity_editor" -batchmode -nographics -projectPath "$PWD/Game" -buildTarget StandaloneWindows64 -executeMethod Game.Editor.BuildCommands.BuildStage9Windows -quit -logFile "$report_dir/BuildWindows.log"
 
-Все вызовы тестов и сборки запускайте последовательно в закрытой рабочей копии Unity или в отдельной копии нужного SHA. После реализации S9-04 запустите собранный Windows Player с --stage9-smoke и -stage5-profile, указывающим на новый дочерний каталог Game/TestResults/Saves. Успешные отчёты XML содержат реально выполненные тесты и ноль failures; журнал сборки фиксирует успех и местоположение Player. Если запускаете из UI, путь — Bootstrap → Play → Карта города → Проверка ранчо.
+Для целевого PlayMode добавьте к команде PlayMode `-testFilter 'Game\.Tests\.(RanchMapPlayTests|RanchCombatTests|FixedStreetMapPlayTests)'` и задайте отдельный XML. Для macOS используйте `-buildTarget StandaloneOSX -executeMethod Game.Editor.BuildCommands.BuildStage9Mac`. Все вызовы тестов и сборки запускайте последовательно в закрытой рабочей копии Unity или в отдельной копии нужного SHA. Успешные XML содержат выполненные тесты и ноль ошибок. Журнал и BuildReport фиксируют результат сборки и путь к Player.
+
+Задайте `ranch_player` полным путём к исполняемому файлу Development Player. Выполните три запуска по очереди, с тем же новым каталогом профиля в `report_dir`. Начальный профиль создаётся в `death`, затем два новых процесса читают его и подтверждают победу и повторное чтение. Ожидается `S9_PLAYER_OK` в каждом логе и код выхода 0.
+
+    "$ranch_player" -batchmode -nographics --stage9-smoke death -stage5-profile "$report_dir/profile" -logFile "$report_dir/death.log"
+    "$ranch_player" -batchmode -nographics --stage9-smoke victory -stage5-profile "$report_dir/profile" -logFile "$report_dir/victory.log"
+    "$ranch_player" -batchmode -nographics --stage9-smoke verify -stage5-profile "$report_dir/profile" -logFile "$report_dir/verify.log"
+
+Для ручного прогона откройте Player без `--stage9-smoke`. В Home введите seed, затем выберите «Карта города → Проверка ранчо · 5-1». После каждой попытки вернитесь в Home и смените seed.
 
 ## Validation and Acceptance
 
@@ -97,7 +112,7 @@ Game/Assets/_Game/Scripts/StreetMap содержит карту, RoomController,
 
 ## Artifacts and Notes
 
-S9-01 проверен на macOS arm64 в Unity 6000.3.28f1. SHA, пути prefab, габариты и XML доступны в [передаче У2](../S9_01_RANCH_COMBAT_HANDOFF.md). У2 ведёт сводку Game/Docs/S9_RANCH_ACCEPTANCE.md с проверенным SHA, платформой, seed, временем ручных попыток, номером сборки, XML, логом и открытыми условиями. Исходные данные для сравнения записаны в [проверке Stage 8](S8_SEWER_PLAN.md#artifacts-and-notes), а готовые промпты — в [старте Stage 9](../../../.agent/START_STAGE_9.md).
+S9-01 проверен на macOS arm64 в Unity 6000.3.28f1. SHA, пути prefab, габариты и XML доступны в [передаче У2](../S9_01_RANCH_COMBAT_HANDOFF.md). Фактические XML, логи, GUID macOS Player, seed и состояние платформ указаны в [отчёте S9-04](../S9_RANCH_ACCEPTANCE.md). Исходные данные для сравнения записаны в [проверке Stage 8](S8_SEWER_PLAN.md#artifacts-and-notes), а готовые промпты — в [старте Stage 9](../../../.agent/START_STAGE_9.md).
 
 ## Interfaces and Dependencies
 
@@ -112,3 +127,5 @@ S9-01 проверен на macOS arm64 в Unity 6000.3.28f1. SHA, пути pref
 27 ноября 2026. Закрыт S9-02. Диагностический маршрут и геометрия проверены в Unity. В S9-03 предстоит связать контрольные точки и запуск ранчо с постоянным профилем.
 
 27 ноября 2026. Закрыт S9-03. Проверены старый формат профиля, экипировка, возврат в Home и восстановление после ошибки записи. Ручная оценка и Player остаются в S9-04.
+
+27 ноября 2026. В S9-04 внесены результаты Unity, сборки macOS, предсборочной проверки Windows и повтора У1. Ручной замер и открытые платформы вынесены в отдельные пункты, чтобы состояние каждой проверки было видно из плана.
